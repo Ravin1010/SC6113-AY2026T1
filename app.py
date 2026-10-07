@@ -13,13 +13,16 @@ def index():
 @app.route("/main", methods=["GET", "POST"])
 def main(): 
     q = request.form.get("q")
-    time = datetime.datetime.now()
-    conn = sqlite3.connect('user.db')
-    c = conn.cursor()
-    c.execute('INSERT INTO user (name,timestamp) VALUES(?,?)',(q,time))
-    conn.commit()
-    c.close()
-    conn.close()
+
+    if q and q.strip():
+        time = datetime.datetime.now()
+        conn = sqlite3.connect('user.db')
+        c = conn.cursor()
+        c.execute('INSERT INTO user (name,timestamp) VALUES(?,?)',(q,time))
+        conn.commit()
+        c.close()
+        conn.close()
+
     return(render_template("main.html"))
 
 @app.route("/transferMoney", methods=["GET", "POST"])
