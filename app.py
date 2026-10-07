@@ -56,7 +56,7 @@ def deleteUser():
     c.close()
     conn.close()
 
-    return render_template("main.html")
+    return render_template("deleteUser.html")
 
 if __name__ == "__main__": 
     app.run()
