@@ -44,6 +44,17 @@ def viewUser():
     conn.close()
     return(render_template("viewUser.html",r=r))
 
+@app.route("/deleteUser", methods=["POST"])
+def deleteUser():
+    conn = sqlite3.connect('user.db')
+    c = conn.cursor()
+    c.execute('DELETE FROM user')
+    conn.commit()
+    c.close()
+    conn.close()
+
+    return render_template("main.html")
+
 if __name__ == "__main__": 
     app.run()
 
