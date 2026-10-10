@@ -1,3 +1,12 @@
 # Solidity compile / isolated local sanity tooling
 node_modules/
 build/contracts/
+
+# Python generated files and local credentials; tracked classroom user.db retained
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.db-journal
+*.db-wal
+*.db-shm

@@ -1,63 +1,89 @@
-# 6113 dapp
-
-from flask import Flask, render_template, request
-import sqlite3
+"""Classroom pages plus the additive Iteration 4 backend API."""
 import datetime
+import os
+import secrets
+from pathlib import Path
+from urllib.parse import urlsplit
+from flask import Flask, render_template, request
+from backend.api import api
+from backend.database import get_db, init_app
 
-app = Flask(__name__)
 
-@app.route("/", methods=["GET", "POST"])
-def index(): 
-    return(render_template("index.html"))
+def create_app(test_config=None):
+    app = Flask(__name__)
+    production = os.getenv('APP_ENV', 'development') == 'production'
+    app.config.from_mapping(
+        APP_ENV='production' if production else 'development',
+        DATABASE=os.getenv('DATABASE_PATH', str(Path(__file__).with_name('user.db'))),
+        SECRET_KEY=os.getenv('FLASK_SECRET_KEY') or secrets.token_hex(32),
+        AUTH_ORIGIN=os.getenv('AUTH_ORIGIN', 'http://localhost:5000'),
+        AUTH_NONCE_TTL=300, AUTH_SESSION_TTL=3600,
+        SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax',
+        SESSION_COOKIE_SECURE=production,
+        PERMANENT_SESSION_LIFETIME=datetime.timedelta(hours=1),
+        MAX_CONTENT_LENGTH=16384,
+        BLOCKCHAIN_RPC_URL=os.getenv('BLOCKCHAIN_RPC_URL', ''),
+        BLOCKCHAIN_CHAIN_ID=os.getenv('BLOCKCHAIN_CHAIN_ID', '11155111'),
+        ROLE_REGISTRY_ADDRESS=os.getenv('ROLE_REGISTRY_ADDRESS', ''),
+        FUNDING_CONTRACT_ADDRESS=os.getenv('FUNDING_CONTRACT_ADDRESS', ''),
+        REMITTANCE_CONTRACT_ADDRESS=os.getenv('REMITTANCE_CONTRACT_ADDRESS', ''),
+        BLOCKCHAIN_DEPLOYMENT_ID=os.getenv('BLOCKCHAIN_DEPLOYMENT_ID', ''),
+        BLOCKCHAIN_DEPLOYMENT_VERIFIED=False,
+    )
+    if test_config:
+        app.config.update(test_config)
+    if app.config['APP_ENV'] == 'production':
+        if not os.getenv('FLASK_SECRET_KEY') and not (test_config or {}).get('SECRET_KEY'):
+            raise RuntimeError('Production requires FLASK_SECRET_KEY')
+        if not os.getenv('AUTH_ORIGIN') and not (test_config or {}).get('AUTH_ORIGIN'):
+            raise RuntimeError('Production requires explicit AUTH_ORIGIN')
+        app.config['SESSION_COOKIE_SECURE'] = True
+    origin = urlsplit(app.config['AUTH_ORIGIN'])
+    if (origin.scheme not in ('http', 'https') or not origin.netloc or origin.username
+            or origin.password or origin.path or origin.query or origin.fragment):
+        raise RuntimeError('AUTH_ORIGIN must be a canonical HTTP(S) origin without a path')
+    if app.config['APP_ENV'] == 'production' and origin.scheme != 'https':
+        raise RuntimeError('Production AUTH_ORIGIN requires HTTPS')
+    init_app(app)
+    app.register_blueprint(api)
 
-@app.route("/main", methods=["GET", "POST"])
-def main(): 
-    q = request.form.get("q")
+    @app.route('/', methods=['GET', 'POST'])
+    def index():
+        return render_template('index.html')
 
-    if q and q.strip():
-        time = datetime.datetime.now()
-        conn = sqlite3.connect('user.db')
-        c = conn.cursor()
-        c.execute('INSERT INTO user (name,timestamp) VALUES(?,?)',(q,time))
-        conn.commit()
-        c.close()
-        conn.close()
+    @app.route('/main', methods=['GET', 'POST'])
+    def main():
+        q = request.form.get('q')
+        if q and q.strip():
+            db = get_db()
+            db.execute('INSERT INTO user (name,timestamp) VALUES(?,?)', (q, datetime.datetime.now().isoformat(sep=" ")))
+            db.commit()
+        return render_template('main.html')
 
-    return(render_template("main.html"))
+    @app.route('/transferMoney', endpoint='transferMoney', methods=['GET', 'POST'])
+    def transfer_money_page():
+        return render_template('transferMoney.html')
 
-@app.route("/transferMoney", methods=["GET", "POST"])
-def transferMoney(): 
-    return(render_template("transferMoney.html"))
+    @app.route('/depositMoney', endpoint='depositMoney', methods=['GET', 'POST'])
+    def deposit_money_page():
+        return render_template('depositMoney.html')
 
-@app.route("/depositMoney", methods=["GET", "POST"])
-def depositMoney():
-    return render_template("depositMoney.html")
+    @app.route('/viewUser', endpoint='viewUser', methods=['GET', 'POST'])
+    def view_user():
+        rows = get_db().execute('SELECT * FROM user').fetchall()
+        return render_template('viewUser.html', r=''.join(str(tuple(row)) for row in rows))
 
-@app.route("/viewUser", methods=["GET", "POST"])
-def viewUser(): 
-    conn = sqlite3.connect('user.db')
-    c = conn.cursor()
-    c.execute('select * from user')
-    r = ""
-    for i in c:
-        print(i)
-        r = r + str(i)
-    print(r)
-    c.close()
-    conn.close()
-    return(render_template("viewUser.html",r=r))
+    @app.route('/deleteUser', endpoint='deleteUser', methods=['POST'])
+    def delete_user():
+        db = get_db()
+        db.execute('DELETE FROM user')
+        db.commit()
+        return render_template('deleteUser.html')
 
-@app.route("/deleteUser", methods=["POST"])
-def deleteUser():
-    conn = sqlite3.connect('user.db')
-    c = conn.cursor()
-    c.execute('DELETE FROM user')
-    conn.commit()
-    c.close()
-    conn.close()
+    return app
 
-    return render_template("deleteUser.html")
 
-if __name__ == "__main__": 
+# Import creates no database/auth records. Schema initialization is lazy or via CLI.
+app = create_app()
+if __name__ == '__main__':
     app.run()
-
