@@ -1,119 +1,278 @@
-# Iteration 6B — production integration (checkpoint; not yet complete)
+# Iteration 6B — production persistence, hosted verification and mobile UX: final freeze
 
-Base: `ab7ef5d8b674ae2b89cc7796300e792b71030d8a`.
-Branch: `feature/iteration-6b-production-deployment`.
-Public service: https://sc6113-ay2026t1.onrender.com.
+Iterations 1–6A remain approved/frozen. This document consolidates Iteration 6B
+only; it does not start Iteration 7. Frozen implementation head:
+`f32ab933f5aa4cb51237a6468ad9a317c2ee2f79`.
+Iteration 6A base: `ab7ef5d8b674ae2b89cc7796300e792b71030d8a`.
+Branch: `feature/iteration-6b-production-deployment`; no merge to `main`.
+The final consolidation commit changes documentation only.
 
-## Minimal database integration
+## Evidence and authority boundaries
 
-Turso classic **libSQL-engine** database with official `libsql==0.1.11` Python
-DB-API driver, directly connecting to the remote primary. No embedded replica,
-local database synchronization, ORM, or backend rewrite. `backend/turso.py`
-only adapts result rows and SQL errors to the existing application interface.
-Native driver transactions retain commit/rollback and affected-row checks;
-nonce consumption and indexing continue to use transaction blocks. SQLite SQL,
-foreign keys, constraints, upserts and the accepted schema remain unchanged.
+| Kind | Meaning |
+|---|---|
+| Authoritative blockchain state | Verified Sepolia contracts determine authorized roles, pause, balances, reservations, remittance parties/amount/status and transaction outcomes. |
+| Turso application-support state | User Logs, nonce/session support, wallet metadata, indexed transaction/event evidence and indexing progress. Activity is non-authoritative history, not financial truth. |
+| Browser snapshot | Temporary presentation/performance cache of earlier verified reads. It cannot authorize an action or establish current financial truth. |
+| Owner-observed manual evidence | Hosted MetaMask actions, observed dashboard/API results, redeploy persistence and physical-phone checks supplied by the owner. These are not represented as actions performed by Work. |
+| Automated evidence | Isolated Python/browser/EVM regressions and independently obtained read-only service/chain checks. Browser wallet submissions and local EVM transactions are test mocks/local operations, not Sepolia writes. |
 
-Absent Turso configuration in development/testing uses ordinary stdlib SQLite.
-Production requires a remote `.turso.io` URL and token; it never silently falls
-back to a local file. Additive initialization creates a clean remote schema;
-**no local data is copied**. Turso is application-support storage for User Logs,
-auth nonces, wallet metadata, server session records, indexed transactions/events,
-and indexing progress. It is never the authority for financial state.
+## Production architecture and configuration
 
-Official references inspected 2026-10-10:
+Public URL: https://sc6113-ay2026t1.onrender.com
+
+| Item | Frozen value |
+|---|---|
+| Render service | `srv-dal7read0e5s738rldh0` / `SC6113-AY2026T1` |
+| Render branch | `feature/iteration-6b-production-deployment` |
+| Hosting | Existing free Singapore Python service, one instance |
+| Build / start | `pip install -r requirements.txt` / `gunicorn app:app` |
+| Production database | One free Turso database, `sc6113-remittance` |
+| Network / chain | Sepolia / `11155111` |
+| Deployment ID | `sc6113-sepolia-11884239` |
+| Admin | `0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd` |
+| RoleRegistry | `0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678` |
+| deposit_money | `0x630863E58375Db128EFEfA51Ee369141cCbb839A` |
+| paynow | `0xA2Ee37DD717a8758Eb864788456d047b296C00E8` |
+| Manifest | `deployment/sepolia.json` |
+
+The existing three-contract architecture, permanent wiring, ABI/build evidence
+and Sepolia deployments are unchanged. Historical classroom addresses are not
+used as the evolved deployment. Solidity sources match frozen Iteration 3 commit
+`313a82a8514624efd9351f3d45180447ae6b966d` byte-for-byte.
+
+Environment variable names/requirements only; no secret values are recorded:
+
+| Variable | Requirement |
+|---|---|
+| `APP_ENV` | `production` |
+| `FLASK_SECRET_KEY` | Strong stable secret, entered privately in Render |
+| `AUTH_ORIGIN` | `https://sc6113-ay2026t1.onrender.com` |
+| `TURSO_DATABASE_URL` | Remote classic libSQL primary; no local-file fallback in production |
+| `TURSO_AUTH_TOKEN` | Database credential, entered privately in Render |
+| `BLOCKCHAIN_RPC_URL` | Existing Sepolia HTTPS RPC; credential stays private |
+| `BLOCKCHAIN_CHAIN_ID` | `11155111` |
+| `ROLE_REGISTRY_ADDRESS` | Frozen RoleRegistry above |
+| `FUNDING_CONTRACT_ADDRESS` | Frozen deposit_money above |
+| `REMITTANCE_CONTRACT_ADDRESS` | Frozen paynow above |
+| `BLOCKCHAIN_DEPLOYMENT_ID` | `sc6113-sepolia-11884239` |
+| `BLOCKCHAIN_MANIFEST_PATH` | `deployment/sepolia.json` |
+| `DATABASE_PATH` | Optional local development/test SQLite path |
+
+Production session cookies remain Secure/HttpOnly/SameSite=Lax. HTTPS-origin,
+single-use nonce/signature verification and session validation fail closed.
+Flask has no wallet keys. No Turso token, RPC credential, Flask secret, nonce,
+signature or CSRF/authentication token is committed in this evidence document.
+`.env.example` contains variable names with empty values.
+
+## Turso integration and durable User Log evidence
+
+The minimal adapter uses official `libsql==0.1.11` against the classic libSQL
+remote primary. `backend/turso.py` adapts rows/errors to the existing Flask
+DB-API usage; no ORM, local replica/synchronization or architecture rewrite.
+Ordinary local development/testing continues to use stdlib SQLite. Production
+starts from the accepted clean additive schema; historical local test/session
+records were not migrated. The existing schema, constraints, foreign keys,
+upserts, nonce-consumption transactions and atomic indexing behavior are retained.
+No schema change is part of the final consolidation.
+
+References inspected during 6B implementation (2026-10-10):
 - https://docs.turso.tech/sdk/python/reference
 - https://docs.turso.tech/sdk/python/quickstart
 - https://docs.turso.tech/cli/db/create
 - https://turso.tech/pricing
 
-The driver must match the database engine: `libsql` requires a classic libSQL
-DB, not the new Turso-engine `--tursodb` option. Alternatives were rejected here:
-`pyturso` synchronization introduces a local file and explicit sync;
-`turso_serverless` targets the other engine. Current Free plan advertises 5 GB,
-500 million monthly rows read, 10 million rows written, 100 databases and
-one-day restore retention. Use **one free DB**, no paid upgrades. Free quotas and
-short backup retention remain operational limitations. Real remote compatibility
-must be confirmed at the hosted checkpoint; local native-driver tests are not
-represented as remote-production proof.
+The driver requires the classic libSQL engine, not the alternative Turso engine.
+One free database was used; no paid infrastructure was introduced. Provider
+quotas and limited free backup retention are operational limits.
 
-## User Log
+The visible **Name** / **Save Name & Continue** form trims/validates names,
+stores a server UTC timestamp and continues to `/main`. `user(name,timestamp)`
+remains the classroom table. `/viewUser` shows Name/Timestamp columns;
+**Delete All User Logs** clears only `user`, not authentication or index tables.
+This is not registration or authentication and does not assign wallet roles.
 
-Visible Name / Save Name & Continue form, trimmed 1–120 characters, server UTC
-timestamp, redirect to `/main`. `user(name,timestamp)` remains unchanged.
-`/viewUser` renders Name/Timestamp columns; `/deleteUser` deletes **user only**.
-This feature is independent of wallet login and roles. No passwords or profiles.
+Owner-verified hosted persistence sequence:
+1. Names entered through the visible production form.
+2. Timestamped records saved and displayed in User Log.
+3. Render redeployed on the same production branch.
+4. The same records remained after redeploy, demonstrating durable remote storage
+   rather than reliance on Render's ephemeral local filesystem.
+5. Delete All User Logs cleared the names; the page showed **No names logged.**
+6. Wallet authentication/session and transaction/event indexing remained usable
+   afterward, consistent with deletion being restricted to the `user` table.
 
-## Presentation caching
+This is the completed **insert → view → survive redeploy → delete all** evidence.
+Automated schema/delete-isolation/atomicity tests supplement it; local libSQL
+checks alone are not presented as proof of remote Turso persistence.
 
-`sessionStorage` has a single explicit-allowlist snapshot scoped by authenticated
-wallet, actual wallet chain, deployment ID supplied in HTML, and public session
-presentation epoch (not an authentication token). It includes roles/pause/balances and page-specific read results, never
-nonces, signatures, CSRF/auth tokens or credentials. Sessions are revalidated
-with the backend on page load; cached UI is not authentication or authorization.
-Unsigned preparation still verifies current authoritative contract preconditions.
+## Render deployment and rollback evidence
 
-First authenticated financial page reads verified account/funding state once.
-Navigation reuses that state; dashboard-only history/list data are fetched only
-when first needed and then cached. User Log pages do not trigger financial reads.
-Identical concurrent GETs and eligibility reads share promises. Focus/visibility
-only check session validity, never reload blockchain state for the same session.
+Read-only Render inspection during final consolidation confirmed implementation
+head `f32ab933f5aa4cb51237a6468ad9a317c2ee2f79` was **Live**, deployment
+`dep-db58k07avr4c73esj0b0`, finished `2026-10-10T18:56:01.70302Z`.
+Service inspection confirmed the 6B feature branch, free plan, Singapore region,
+unchanged Python build/start commands and commit-triggered auto-deploy.
+The final documentation push may create another deploy of identical runtime
+code; its status is reported in the final response. No Render settings are changed.
 
-A canonical successful receipt with at least six confirmations clears the
-snapshot and performs **one shared fresh state load**, then refreshes needed
-section/ID data against that snapshot. Claim/cancel show terminal states.
-Rejected/failed transactions retain the snapshot. Manual Refresh, account,
-network, session/wallet and deployment changes invalidate it. Explicit Refresh
-remains necessary for external changes made by other wallets. Cached values are
-presentation snapshots of earlier verified reads, never financial authority.
-Accepted 6A participant-event association for MetaMask wrappers/batches remains
-unchanged. The temporary loading flash is outside this work.
+Prior non-secret rollback configuration is retained in
+`docs/deployment/render-rollback.json`: previous `main` commit
+`92707ce35aa22246d6cfd5592e85b52f33ddb7bc`, previous live deploy
+`dep-db335vg473hc7388jfb0`, same build/start commands. Environment backups belong
+privately to the owner. Any rollback is a separately authorized operational
+step; no rollback or environment change is performed in this consolidation.
 
-## Production configuration
+## Hosted MetaMask authentication and role authorization
 
-Enter secrets directly in Render Environment, never in chat or the repository:
+Owner-verified hosted authentication on Render displayed Admin wallet
+`0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd`, Sepolia, **Admin / Auditor**.
+Wallet switching and Sender/Recipient re-authentication worked in the hosted
+lifecycle. Authentication signs a nonce message; connection alone is not login.
+Private keys remain in MetaMask. Role permissions are verified on-chain.
 
-| Variable | Value / requirement |
+| Role | Wallet | Hosted authorization transaction | Observation |
+|---|---|---|---|
+| Sender | `0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a` | `0x0d1225ee36f8682d44a2ab952851b6223505e272f86c38fe9221e92f58fc28a9` | Confirmed with six confirmations |
+| Recipient | `0x890F63435Cf6F4D526F7062A282A94c74A50cFa3` | `0x27a9cede4d5f9a66440e19614f234b32728992ca4a41061d07289576d323320a` | Confirmed with six confirmations |
+
+## Hosted deposit → create #3 → claim lifecycle
+
+These are the existing owner-signed hosted transactions. This consolidation
+submits no additional Sepolia writes.
+
+| Action | Exact transaction hash | Block | Verified deployment events |
+|---|---|---|---|
+| Deposit `0.001 test ETH` | `0xfdb959d34b7f4ba6e82d0030f067fb9f5e36c3c7c18ced763c8a3441b02e2d28` | `11886306` | `FundsDeposited` |
+| Create remittance #3, `0.001 test ETH` | `0x2f2d2ba058d5ca56ad4d18fc1fdc2a2d2bb90fd2ced22dbd189b267a6bbc69ba` | `11886325` | `FundsReserved`, `RemittanceCreated`, both `remittanceId = 3` |
+| Recipient claims #3 | `0x23fd98f2e04e8f7b47eae0117a25935c6b90b618a560f4de81de57614b02a73c` | `11886364` | `ReservedFundsReleased`, `RemittanceClaimed`, both `remittanceId = 3` |
+
+Owner-verified hosted receipts for all three returned `status: CONFIRMED`,
+`canonical: true`, `activity_indexed: true`. Amount is
+`1000000000000000 wei`; parties are the Sender/Recipient above. The creation
+hash was recovered from hosted receipt logs rather than invented.
+
+Observed after creation: Sender available `0.001 test ETH`, reserved
+`0.001 test ETH`, #3 `PENDING`. The available balance includes the wallet's
+existing funding state; this is not a claim that the single listed deposit alone
+produced both balances.
+
+Authoritative final #3 read: `id: 3`, `status: COMPLETED`,
+`reservation_active: false`, amount `0.001 test ETH`,
+`source: verified_contract`, `authoritative: true`.
+The final dashboard showed #3 `COMPLETED`, #2 `CANCELLED`, #1 `COMPLETED`.
+Independent read-only checks from this consolidation are recorded separately below.
+
+## Direct authoritative remittance discovery
+
+`GET /api/remittances` reads verified `remittanceCount`, scans contract records
+newest-first and reads remittance/reservation state directly. Ordinary wallets
+see sender/recipient participation; Admin may see all. Pagination occurs after
+filtering. Responses use `source: verified_contract`, `authoritative: true`,
+`discovery: direct_contract_scan`. A missing/partial Turso event index cannot
+block financial discovery. The owner production-validated #1, #2 and #3.
+Direct contract/RPC failures still fail closed; no fabricated financial records.
+
+## Historical index and verified receipt fast path
+
+The non-authoritative Turso Activity index remains bounded/resumable: six-second
+request budget capped at eight, chunks capped at 25 blocks, safe atomic progress,
+pass-local receipt/transaction/block RPC deduplication, short timeout/no retry
+indexing transport, canonical-block/reorg fences and reconciliation/reset.
+Incomplete chunks never advance checkpoints. History can report partial
+`caught_up: false` or a structured unavailable condition without blocking direct
+financial reads. Full historical catch-up is not a freeze prerequisite.
+
+After successful server verification of a canonical receipt with the required
+confirmations, the receipt endpoint atomically/idempotently upserts the transaction
+and its decoded verified-contract events. It shares canonical row/payload mapping
+with historical indexing. It does not accept browser-supplied event data and
+never advances historical `indexing_state`. Wallet/participant checks precede
+insertion; event participants preserve wrapper/batch visibility. Authorization,
+block/hash/log validation and atomic rollback remain enforced.
+
+Owner production verification confirmed the receipt fast path for the deposit,
+creation and claim above. Activity subsequently displayed those transactions and
+events. Older events appeared gradually through ordinary backfill, showing that
+the two paths coexist. Duplicate receipt verification remains idempotent.
+Activity indicates incomplete historical catch-up separately from recent verified
+receipts. Neither path makes Turso the authority for balances or remittance status.
+
+## Cross-page snapshot caching and safe verification retry
+
+Non-secret `sessionStorage` snapshots are scoped by authenticated wallet,
+Sepolia chain, deployment and public session presentation epoch. No authentication
+tokens, nonces, signatures, CSRF secrets or provider credentials are cached.
+Page navigation reuses the snapshot; dashboard list/history are fetched when
+needed, and funding-first loads omit unrelated sections. Concurrent identical
+reads share promises. Focus/visibility checks session validity without full
+financial reloads. Explicit **Refresh account & activity** checks external
+changes; wallet/network/session/deployment changes invalidate context.
+
+Confirmed state-changing actions invalidate the snapshot once and perform one
+shared authoritative load plus necessary affected section/ID reads. Claim/cancel
+must verify terminal remittance state. Ordinary clicks/navigation/tab changes do
+not trigger that load. Rejected/failed submissions do not invalidate the cache
+as if a successful financial change occurred.
+
+A valid submitted hash is preserved with its explorer link and non-secret pending
+context across navigation. Submission remains locked while its outcome is
+unresolved. Temporary verification failures show a neutral submitted/pending
+message and **Check transaction**: verification only, never automatic re-signing
+or resubmission. Input preview cannot erase the notice. A canonical failed/reverted
+receipt with six confirmations unlocks; a successful receipt must also complete
+its authoritative post-state refresh before normal action eligibility returns.
+Receipt/post-state outages and verification-only recovery are automated browser
+regressions. The owner observed temporary hosted RPC failures after create/claim;
+later authoritative state proved completion, and accepted final retry behavior
+is retained. No additional live write was performed merely to retest an outage.
+
+Measured automated cache behavior: initial dashboard requires one account,
+one balance, one list and one history read. Navigation across Funding/Remittance/
+User Log/back adds zero repeats of those snapshot reads. Explicit Refresh adds
+one of each. Account/network/session/deployment changes still refresh as required.
+
+## Physical mobile MetaMask verification
+
+**Owner-verified manual check: PASS.** Production Render site usable from a
+physical phone; MetaMask mobile workflow and wallet authentication work; the
+responsive interface is usable. Device, OS, browser and model details were not
+supplied and are not invented. Browser regression emulation at 360/768/1280 px
+supplements this evidence and does not replace the physical-phone check.
+No extra mobile blockchain write was required.
+
+## Final automated regressions
+
+| Suite | Final result |
 |---|---|
-| APP_ENV | production |
-| FLASK_SECRET_KEY | Newly generated strong stable secret |
-| AUTH_ORIGIN | https://sc6113-ay2026t1.onrender.com |
-| TURSO_DATABASE_URL | The new free classic libSQL DB URL |
-| TURSO_AUTH_TOKEN | DB-scoped token, stored only in Environment |
-| BLOCKCHAIN_RPC_URL | Working Sepolia HTTPS RPC; credentials only in Environment |
-| BLOCKCHAIN_CHAIN_ID | 11155111 |
-| ROLE_REGISTRY_ADDRESS | 0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678 |
-| FUNDING_CONTRACT_ADDRESS | 0x630863E58375Db128EFEfA51Ee369141cCbb839A |
-| REMITTANCE_CONTRACT_ADDRESS | 0xA2Ee37DD717a8758Eb864788456d047b296C00E8 |
-| BLOCKCHAIN_DEPLOYMENT_ID | sc6113-sepolia-11884239 |
-| BLOCKCHAIN_MANIFEST_PATH | deployment/sepolia.json |
+| Solidity compilation | solc `0.8.34+commit.80d5c536`, three contracts, zero warnings; Shanghai, optimizer 200 runs |
+| Contract sanity | 10 groups passed; 50 expected rejection checks passed |
+| Python/backend/database | 126 tests passed, isolated SQLite/libSQL databases |
+| Browser/frontend | 52 tests passed, isolated Flask sessions and controlled wallet mocks |
+| SQLite local-chain HTTP integration | 14 assertions passed; 12 canonical events, repeat indexing unchanged |
+| libSQL local-chain HTTP integration | 14 assertions passed; 12 canonical events, repeat indexing unchanged |
+| Dependency check | `python -m pip check`: no broken requirements |
+| Whitespace/scope | `git diff --check` passes; final change is this documentation only |
 
-Production cookies remain Secure/HttpOnly/SameSite=Lax; HTTPS canonical origin
-is required; wallet login remains single-use/expiring and fail-closed. Flask
-never owns wallet keys. `.env.example` documents variable names only.
+Coverage includes wallet nonce/signature/session validation, schema/User Log
+isolation, receipt atomicity/idempotence/scoping, unchanged historical checkpoints,
+slow/partial catch-up, direct contract discovery, receipt/post-state outage locks,
+verification-only retry, final remittance state, failure unlock, cache/navigation
+and mobile layout. Local EVM checks verify genuine ABI/RPC receipt decoding and
+fast-path insertion before backfill with both database drivers; no Sepolia writes.
+Ganache's native µWS/Node ABI mismatch falls back successfully to JavaScript;
+it is a test-tool performance observation, not an application failure.
 
-## Render rollback
+Frozen source, manifest and schema comparisons pass. Operational credential
+pattern scan has no findings; `.env.example` is blank. Runtime `user.db` SHA-256
+remains `108de2caedd2c73374229f955de1e183387590b1031d05b242b03d386dbfe7cb`.
+No runtime code, schema, secrets, RPC settings, contract addresses or Solidity
+changes were necessary for this final consolidation.
 
-Read-only service inspection confirmed existing free Singapore Python service,
-`main`, build `pip install -r requirements.txt`, start `gunicorn app:app`, automatic
-commit deploys. Previous live deploy `dep-db335vg473hc7388jfb0` used main commit
-`92707ce35aa22246d6cfd5592e85b52f33ddb7bc`.
-Non-secret rollback configuration: `docs/deployment/render-rollback.json`.
-Owner must privately back up current Environment values before replacing them;
-the connector does not expose environment backups or a branch-setting action.
-Reuse this service, switch its branch to the 6B feature branch, retain build/start
-commands. Restore main and previous environment values to roll back.
-
-A temporary checkpoint commit is necessary to supply Render with buildable
-GitHub source before hosted/manual verification; it is not the final approved
-6B commit. Final commit follows evidence and regression completion.
-
-## Verification commands
+Commands (browser dependencies belong to the test environment, not production):
 
 ```sh
-python -m pip install -r requirements.txt
 python -m unittest discover -s tests -p 'test_*.py'
-npm ci
 npm run compile:contracts
 npm run sanity:contracts
 PYTHON=python node tests/local-chain.cjs
@@ -123,220 +282,74 @@ python -m pip check
 git diff --check
 ```
 
-Browser checks require Playwright and Chromium in the verification environment,
-not in production dependencies. Test databases/wallets are isolated and no test
-records are copied to runtime `user.db` or production.
+## Independent final read-only verification
 
-## Hosted evidence — pending required checkpoints
+Checked at `2026-10-10T19:23:08Z` using HTTP GETs and a separate credential-free
+public Sepolia RPC connection. Render's configured RPC/secrets were not read or
+changed. No wallet transaction, login signature or production database write was
+performed by these independent checks.
 
-At the original source checkpoint, Turso and Render setup were still pending.
-Subsequent owner-reported hosted checks are recorded in the correction section below;
-no credentials have been requested in chat.
-Local regressions are recorded at the checkpoint, not claimed as hosted proof.
+- Public landing, Dashboard, Funding, Remittance and User Log routes returned
+  **HTTP 200**. The User Log read is an availability check; the earlier delete
+  empty-state proof remains the owner's manual observation.
+- Unauthenticated `/api/auth/session`, `/api/remittances` and
+  `/api/transactions` returned **HTTP 401**, preserving protected-session access.
+- The production service/branch and Live implementation head were independently
+  confirmed through Render's read-only service/deployment metadata.
+- The accepted `SepoliaReader` independently verified source/runtime/deployment
+  correspondence, Admin and permanent wiring, chain `11155111` and deployment
+  `sc6113-sepolia-11884239`. Snapshot block **11886605**, hash `0xbed7c75789f89ba8bf4943ad82280fd18bf805e6fe976928f1f6a1b5a94758d0`;
+  verified `remittanceCount = 3`.
+- Direct verified #3 read returned `COMPLETED`, `reservation_active: false`,
+  `1000000000000000 wei`, matching Sender/Recipient and authoritative provenance.
+- Deposit/create/claim receipts were independently read and their deployment
+  events decoded: canonical, successful, blocks **11886306 / 11886325 / 11886364**,
+  respectively **300 / 281 / 242 confirmations** at the snapshot.
+  Deposit decoded `FundsDeposited`; creation decoded `FundsReserved` and
+  `RemittanceCreated`; claim decoded `ReservedFundsReleased` and
+  `RemittanceClaimed`. The claim's outer destination is a wallet wrapper rather
+  than paynow; verified deployment events establish the accepted association.
+- This environment has no owner-authenticated production session or Turso
+  credential. Current hosted Activity/Turso visibility and
+  `activity_indexed: true` remain the owner's supplied manual evidence; the
+  independent chain receipt reads do not claim to re-query Turso or bypass login.
+  Direct-discovery implementation/source and regression checks supplement the
+  owner's authenticated production #1/#2/#3 list observation.
 
-Still required, in order:
-1. Free Turso classic libSQL DB and credentials entered directly in Render.
-2. Previous Environment values privately preserved, feature branch deployed.
-3. Hosted API/auth/remote compatibility and unchanged Sepolia reads verified.
-4. Name insert/view, remote row confirmation, restart/redeploy survival,
-   Delete All User Logs, and preservation of auth/indexing tables.
-5. User-signed hosted authorization of Sender/Recipient, small deposit, one
-   create and Recipient claim. Record receipts/IDs; do not repeat the other five
-   transaction types or any contract deployment. Existing wallets reused.
-6. Physical-phone MetaMask-browser checks, no duplicate writes needed.
-7. Final regressions, scope/secret check, final commit/push without main merge.
+## Operational limitations
 
-Iteration 6A deployment and completed smoke-test evidence remain preserved in
-`deployment/sepolia.json`, `deployment/live-smoke-evidence.json` and the 6A doc.
-No new hosted lifecycle transaction or phone result is invented here.
+- Public Sepolia RPC may fail intermittently; reads fail closed and submitted
+  transactions retain a verification-only recovery path.
+- Historical event catch-up may initially be incomplete. Recent verified receipts
+  appear independently; absence from the index does not establish chain absence.
+- Render Free may cold-start after inactivity; Turso persistence survives redeploy.
+- Application evidence waits for six confirmations; this is the application's
+  confirmation policy, not an absolute finality guarantee.
+- Activity/Turso remains non-authoritative evidence/history. Browser snapshots
+  require explicit Refresh for changes made by other wallets.
+- Direct remittance scanning suits the low-volume coursework MVP; no high-scale
+  architecture or production financial suitability is claimed.
+- One free database/provider quotas and limited backup retention remain operational
+  constraints. No paid service was introduced.
+- Cross-border is the user/problem context. Sepolia test ETH does not demonstrate
+  real fiat settlement, FX/banking integration or production international payments.
 
-## Local checkpoint regression results
+## Acceptance criteria and freeze
 
-- Python: **95 passed** (63 accepted tests plus 29 inherited tests exercised
-  through the real libsql adapter and three additional persistence/User Log
-  test methods). All use isolated databases; no remote proof is claimed.
-- Browser: **48 passed** using Chromium and controlled wallet mocks; actual
-  server nonce/signature/session verification remains in the browser flow.
-- Solidity compile: solc **0.8.34**, all three compile, zero compiler warnings.
-- Contract sanity: **10 groups**, **50 expected rejections**, all pass.
-- Local-chain HTTP integration: both sqlite3 and libsql adapters each passed
-  **8 assertions**, indexed **12 canonical events**, repeat indexing unchanged.
-- `pip check` and `git diff --check` pass.
-- Ganache reports a native µWS/Node ABI mismatch and successfully uses its
-  JavaScript fallback; this is test-tool performance only.
-- Phone emulation: 360, 768 and 1280 px checks pass; physical phone pending.
-- Measured cache reads: initial dashboard = one account, one balance, one list,
-  one history request; navigation through Funding/Remittance/User Log/back adds
-  **zero** of those requests. Explicit Refresh adds exactly one of each.
-  Funding-first load omits list/history until dashboard first needs them.
-- Snapshot invalidation/session/deployment/network/account tests pass. Claim and
-  cancel each refresh one account and one balance plus the selected terminal ID.
-- Frozen contracts, ABI/build/deployment evidence, schema, and runtime user.db
-  are unchanged. User.db SHA-256 remains
-  `108de2caedd2c73374229f955de1e183387590b1031d05b242b03d386dbfe7cb`.
-- Changed-file secret-pattern scan passes; `.env.example` values are empty.
+| Criterion | Evidence / result |
+|---|---|
+| Durable hosted database, local SQLite preserved | Owner insert/view/redeploy-survival/delete evidence; automated driver/database regressions — PASS |
+| Existing User Log remains minimal and independent | Visible Name/timestamp flow; deletion restricted to `user` — PASS |
+| Existing Render service reused, secure configuration | Live feature branch, unchanged build/start, no exposed credentials — PASS |
+| Hosted wallet authentication and Sepolia lifecycle | Owner Admin/Sender/Recipient flow and exact authorization/deposit/create/claim receipts — PASS |
+| Financial/index authority separation | Direct #3 completed/inactive reservation; partial index independent — PASS |
+| Receipt fast path and safe retry | Owner receipt/activity results and automated failure/retry/idempotence regressions — PASS |
+| Caching and mobile usability | Automated dedup/navigation/refresh/responsive tests; owner physical MetaMask check — PASS |
+| Frozen scope preserved | No extra Sepolia writes, Solidity/schema/secret changes, main merge, report/slides/Drive edits or Iteration 7 — PASS |
 
-These are pre-hosting checkpoint results. Hosted persistence/restart, hosted
-MetaMask lifecycle and physical-device evidence are still required before the
-final 6B commit/verdict. No final approval is implied by this checkpoint.
+Historical catch-up need not be complete. The operational observations above are
+accepted limitations, not unresolved architecture blockers. Earlier checkpoint
+pending items are superseded by this consolidated evidence. No further live
+transactions are required to freeze Iteration 6B.
 
-## Hosted index catch-up correction
-
-Base checkpoint: `449d708d03b75bf2717eb7d4ac8053473df8235c`; same 6B branch.
-Owner reports successful hosted Turso User Log insert/view, persistence across
-Render redeploy, Delete All User Logs, and MetaMask Admin authentication. These
-are owner-reported results, not new wallet transactions performed by Work.
-The initial clean production index then timed out in synchronous receipt reads
-on `/api/remittances`, producing HTTP 500 and a Gunicorn worker timeout.
-
-The correction keeps the confirmed-log index and direct contract reads, with:
-- A six-second indexing budget (hard configuration cap eight seconds), checked
-  before and after RPC calls, and chunks capped at 25 blocks.
-- A dedicated indexing-only HTTP provider: no retries/backoff, connect timeout
-  at most 0.5 seconds and read timeout at most one second, reduced to fit the
-  remaining budget. The authoritative reader transport is unchanged.
-- Pass-local receipt/transaction caches: each unique transaction is fetched at
-  most once. Ordinary block lookups are shared by height. Deliberate fresh
-  end-of-chunk and verification-snapshot reads remain as reorg fences.
-- Atomic writes of validated chunk events/transactions and their checkpoint;
-  completed chunks survive budget exhaustion. Incomplete chunks never advance
-  progress. A later request continues at checkpoint + 1.
-- Normal budget exhaustion returns `caught_up: false`. RPC failures/timeouts
-  return sanitized `BLOCKCHAIN_READER_UNAVAILABLE` / HTTP 503. If existing
-  checkpoints could not be verified within the budget, return 503 rather than
-  expose unchecked indexed evidence. Orphaned cache is still purged and replayed.
-- Partial discovery is explicitly flagged. Financial remittance records still
-  come from authoritative contract reads; no index completeness is assumed.
-
-No Gunicorn timeout increase, background worker, queue, schema change, new
-credentials, Solidity/deployment changes, or frontend production changes.
-Cross-page caching and explicit Refresh behavior remain intact. Existing safe
-chunks may remain committed when a subsequent chunk fails validation; the next
-pass verifies all checkpoints and purges/replays on reorg. The adjusted rollback
-test asserts that the inconsistent contract chunk has no checkpoint/events,
-while earlier independently validated chunks retain safe progress.
-
-Focused regressions cover clean index, partial progress/continuation, eventual
-completion/idempotence, duplicate logs sharing RPC calls, slow receipts, normal
-partial HTTP 200, structured 503, direct reads independent of catch-up, and a
-real delayed HTTP receipt response that returns 503 in under one second with
-exactly one receipt request. A browser test wait was stabilized for an already
-pending session-only focus check; it still asserts exactly one state reload.
-
-Correction regression results: **104 Python tests**, **48 browser tests**,
-local-chain integration with sqlite3 and libsql (**8 assertions and 12 canonical
-events per driver**, repeat indexing unchanged), and `git diff --check`.
-Hosted lifecycle transactions remain paused; no MetaMask transaction, schema
-change, secret change, smart-contract redeployment, main merge, or Iteration 7.
-This remains a checkpoint correction, not final Iteration 6B approval.
-
-## Second hosted checkpoint correction: authoritative remittance discovery
-
-Base: `b5f3332bb933f637cdbbc1d047a68dff6bb741df`, on the same 6B branch.
-The owner reported hosted account, balance and history HTTP 200 responses but
-remittance-list HTTP 503 while the clean/partial Turso index caught up.
-
-`GET /api/remittances` now discovers directly from the verified reader's
-`remittanceCount`, scanning IDs newest-first through `reader.remittance(id)`.
-The verified immutable Admin address permits all records; ordinary wallets see
-only records naming them as sender or recipient, independently of current role
-revocation. Offset/limit apply after filtering, and scanning stops when the page
-is filled. Each financial record and reservation comes from the verified,
-block-pinned contract reader with its existing snapshot/reorg checks. Responses
-use `source: verified_contract`, `authoritative: true` and
-`discovery: direct_contract_scan`. An empty index is not consulted, populated,
-or required. A direct contract/RPC failure still fails closed with structured
-503; index failure alone cannot block this endpoint.
-
-The frontend labels direct contract discovery and its authoritative empty state.
-It no longer describes remittance discovery as partial indexed history. Existing
-browser snapshots, cache invalidation and deduplication are unchanged.
-`/api/transactions`, the bounded resumable indexer, its receipt/block validation,
-atomic checkpoints and reorg semantics are unchanged. History remains
-non-authoritative and best-effort, returning partial progress or `live_error`.
-Earlier correction notes about index-dependent remittance discovery describe
-the previous checkpoint and are superseded by this section.
-
-Verification: 116 Python tests, including 12 new direct-discovery regressions
-(empty index, failing index, participant/Admin filtering, ordering, filtered
-pagination, direct financial reads, zero count, structured reader failure and
-unchanged history indexing). Browser regressions: 48 full-suite checks plus one new focused check (49 passed),
-cover existing navigation/cache,
-authentication and transaction refresh behavior plus direct discovery wording.
-Local-chain checks run with both sqlite3 and libsql: 10 assertions and 12
-canonical events per driver; completed/cancelled remittances are listed before
-index initialization, and repeat indexing remains idempotent.
-
-Direct scanning is intentionally suitable for the current small coursework
-remittance count; it is not a high-volume search architecture. Hosted
-post-deploy authenticated recheck remains an owner checkpoint. No additional
-MetaMask writes are required or performed for this correction. No Solidity,
-Turso schema, secret, contract deployment, Render configuration, main merge,
-or Iteration 7 change is included.
-
-## Final narrow hosted correction: immediate receipt evidence and safe verification retry
-
-Base: `83c5671498001ee23ea745b6fef398b6b3288126`, same 6B branch.
-The owner completed the hosted lifecycle: Sender/Recipient authorized, Sender
-deposited, remittance #3 created and claimed. Owner-reported authoritative read:
-`#3 COMPLETED`, `reservation_active: false`. Claim transaction:
-`0x23fd98f2e04e8f7b47eae0117a25935c6b90b618a560f4de81de57614b02a73c`.
-These existing live results are preserved; this correction performs no Sepolia
-writes and does not claim a new independent hosted wallet smoke test.
-
-The authenticated receipt endpoint now atomically upserts successful canonical
-receipts after the configured confirmation threshold (six), together with only
-events decoded server-side from verified deployment contracts. A shared history
-writer produces the same transaction/event fields and JSON provenance for the
-receipt path and historical log path. Duplicate verification/backfill remains
-idempotent; re-included transaction evidence updates canonical block fields.
-Receipt hash, removed-log and block correspondence checks fail closed. The
-receipt fast path never writes `indexing_state`, so isolated recent evidence
-cannot skip historical ranges. Authorization precedes persistence. Batch/wrapper
-history visibility also checks decoded event participant addresses, since a
-single transaction's two participant columns cannot describe every batch event.
-No schema changes, browser-supplied events, or financial database authority.
-Historical catch-up retains its budget, RPC deduplication, safe atomic chunks,
-checkpoint continuation and reorg fences/reset. Activity explicitly distinguishes
-incomplete catch-up from recent verified receipts already available in the index.
-Direct `/api/remittances` discovery remains unchanged and independent of history.
-
-After MetaMask returns a valid hash, the interface preserves it and its explorer
-link, locks blockchain submission while unresolved, and records only non-secret
-pending metadata in tab sessionStorage scoped to wallet, Sepolia and deployment.
-A receipt/storage/RPC failure offers **Check transaction**, which only repeats
-verification; it never re-prepares, signs or resubmits a transaction. The lock
-survives route navigation. Input preview cannot overwrite this transaction
-notice. Bounded pending-confirmation polling does not unlock on timeout. A
-canonical failed receipt with six confirmations unlocks; a successful receipt
-unlocks only after the authoritative post-state refresh succeeds. Claim/cancel
-specifically re-read and require the terminal remittance state. Temporary
-post-state failures retain the same hash and lock for a verification-only retry.
-No full reload is reintroduced for ordinary navigation/focus; accepted browser
-snapshot caching and confirmed-action refresh rules remain intact.
-
-Final correction regressions:
-- **126 Python tests**: confirmed receipt insertion, duplicate/backfill
-  idempotence, atomic rollback, unmoved checkpoints, wrapper/multiple participant
-  scoping, partial/unavailable history, receipt validation and existing direct
-  remittance discovery, database and authentication regressions.
-- **52 browser tests**: receipt and post-state outages preserve hash/lock,
-  verification retry uses exactly one original wallet submission, authoritative
-  terminal state refresh, navigation recovery, definitive failure unlock, plus
-  existing account/network/session/cache/mobile regressions. Wallet writes here
-  are controlled mocks, not Sepolia transactions.
-- Local HTTP/EVM integration with **sqlite3 and libsql**: **14 assertions** and
-  **12 canonical events per driver**; confirmed claim receipt inserts two events
-  before backfill, duplicate receipt verification is unchanged, Activity can
-  expose the receipt while history is partial, and backfill stays idempotent.
-- Solidity **0.8.34**, three contracts compiled, zero warnings; **10 sanity
-  groups / 50 expected rejection checks** pass. Solidity sources unchanged.
-- Dependency check and `git diff --check` pass; committed runtime `user.db`
-  unchanged. No secrets, schema, contract deployment, Render architecture, main,
-  formal report, slide or Iteration 7 changes.
-
-This is a correction checkpoint. Render auto-deploy follows the branch push;
-post-deploy authenticated read verification remains separate. Previously
-submitted hashes may be checked through the receipt endpoint without another
-wallet transaction. Non-authoritative indexed evidence may still lag for older
-transactions not individually verified; bounded historical backfill continues.
+**ITERATION 6B: APPROVED / FROZEN**
