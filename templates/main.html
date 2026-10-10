@@ -1,26 +1,17 @@
-<head>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body>
-    <div class="container">
-        <h2>Main</h2>
-        <form action="/transferMoney" method="POST">
-            <input type="submit" value="Transfer Money">
-        </form>
-        <form action="/depositMoney" method="POST">
-            <input type="submit" value="Deposit Money">
-        </form>
-        <form action="/viewUser" method="POST">
-            <input type="submit" value="View User Log">
-        </form>
-        <form action="/deleteUser" method="POST">
-            <input type="submit" value="Delete User Log">
-        </form>
-        <form action="/" method="POST">
-            <input type="submit" value="Exit">
-        </form>
-    </div>
-</body>
-
-
+{% extends 'base.html' %}{% import 'forms.html' as forms %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-heading"><p class="eyebrow">Cross-border remittance</p><h1>Your remittance dashboard</h1><p>A simple sender → recipient claim workflow, using Sepolia test ETH.</p></div>
+<div id="session-content" hidden>
+  <section class="card" id="account"><div class="section-heading"><h2>Wallet &amp; account</h2><span id="session-status" class="badge">Checking session</span></div>
+    <dl class="account-grid"><div><dt>Authenticated wallet</dt><dd id="wallet-address" class="identifier">Unavailable</dd></div><div><dt>Connected wallet</dt><dd id="connected-wallet" class="identifier">Not connected</dd></div><div><dt>Wallet network</dt><dd id="wallet-network">Unavailable</dd></div><div><dt>Roles</dt><dd id="role-status">Role information unavailable until verified Sepolia deployment.</dd></div></dl>
+  </section>
+  <section class="notice deployment-panel" aria-labelledby="deployment-heading"><h2 id="deployment-heading">Sepolia deployment</h2><p data-deployment-status>Blockchain deployment not configured yet.</p><details><summary>Deployment details</summary><p id="deployment-detail" class="identifier">Waiting for backend status.</p></details><button id="refresh" class="secondary" type="button">Refresh account &amp; activity</button></section>
+  <div class="grid two">
+    <section class="card" id="funding"><p class="eyebrow">01 · Funding</p><h2>Deposit &amp; available funds</h2><p>Available and reserved balances are unavailable until verified deployment.</p><div class="actions"><button type="button" disabled data-blockchain-action>Deposit</button><button type="button" disabled data-blockchain-action>Withdraw</button></div><a class="text-link" href="/depositMoney">Open funding forms →</a></section>
+    <section class="card" id="remittance"><p class="eyebrow">02 · Remittance</p><h2>Create, claim or cancel</h2><p>Pending remittances and live statuses are unavailable until verified deployment.</p><div class="actions"><button type="button" disabled data-blockchain-action>Create remittance</button><button type="button" disabled data-blockchain-action>Claim</button><button type="button" disabled data-blockchain-action>Cancel</button></div><a class="text-link" href="/transferMoney">Open remittance forms →</a></section>
+  </div>
+  <section class="card" id="activity" aria-labelledby="activity-title"><div class="section-heading"><div><p class="eyebrow">03 · Activity</p><h2 id="activity-title">Indexed transaction history</h2></div></div><p id="history-provenance" class="muted">Cached application index; not authoritative blockchain state.</p><div id="history-status" role="status" aria-live="polite">Loading indexed history…</div><div id="history-records" class="history-list"></div><div class="actions"><button id="previous-history" class="secondary" type="button" disabled>Previous</button><button id="next-history" class="secondary" type="button" disabled>Next</button></div></section>
+  {{ forms.admin() }}
+</div>
+{% endblock %}

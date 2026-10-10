@@ -1,16 +1,5 @@
-<head>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body>
-    <div class="container">
-        <h2>Welcome to SC6113 DApp</h2>
-        <h3>Please enter your name: </h3>
-        <form action="/main" method="POST">
-            <input type="text" name="q">
-            <input type="submit" value="Enter">
-        </form>
-    </div>
-</body>
-
-
+{% extends 'base.html' %}
+{% block title %}Welcome{% endblock %}
+{% block content %}
+<section class="card welcome"><p class="eyebrow">SC6113 Group Project</p><h1>Cross-Border Remittance</h1><p>Recipient claim and status tracking, built from our classroom DApp.</p><a class="button" href="/main">Open dashboard</a><details><summary>Classroom name log</summary><form action="/main" method="POST"><label for="classroom-name">Name (optional classroom record)</label><input id="classroom-name" name="q" type="text" maxlength="120"><button type="submit" class="secondary">Save name &amp; open dashboard</button></form><p class="muted">This name log is separate from wallet authentication and role authorization.</p></details></section>
+{% endblock %}

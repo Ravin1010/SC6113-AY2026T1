@@ -1,12 +1,3 @@
-<head>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body>
-    <div class="container">
-        <h4>User log deleted</h4>
-        <form action="/main" method="POST">
-            <input type="submit" value="Main">
-        </form>
-    </div>
-</body>
+{% extends 'base.html' %}
+{% block title %}User log deleted{% endblock %}
+{% block content %}<section class="card"><h1>User log deleted</h1><p>Classroom name records have been cleared.</p><a class="button" href="/main">Back to dashboard</a></section>{% endblock %}
