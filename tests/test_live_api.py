@@ -30,8 +30,8 @@ class LiveAPITests(unittest.TestCase):
         balance=self.client.get('/api/users/me/balances');self.assertEqual(balance.json['available']['wei'],str(10**18));self.assertTrue(balance.json['authoritative'])
         detail=self.client.get('/api/remittances/1');self.assertEqual(detail.json['status'],'PENDING');self.assertTrue(detail.json['authoritative'])
 
-    def test_list_index_discovery_and_cache_provenance(self):
-        items=self.client.get('/api/remittances').json;self.assertEqual(items['items'],[]);self.assertEqual(items['discovery'],'confirmed_event_index')
+    def test_list_contract_discovery_and_history_cache_provenance(self):
+        items=self.client.get('/api/remittances').json;self.assertEqual([item['id'] for item in items['items']],['1']);self.assertEqual(items['discovery'],'direct_contract_scan');self.assertTrue(items['authoritative'])
         history=self.client.get('/api/transactions').json;self.assertTrue(history['live_blockchain_checked']);self.assertFalse(history['authoritative']);self.assertTrue(history['indexing_available'])
 
     def test_admin_derived_from_chain_only(self):

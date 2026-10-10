@@ -73,8 +73,8 @@ export function setupLive(getSession, onError, refresh) {
       try{const data=await viewRead('/api/remittances?limit=20&offset=0',requestAPI);if(ticket!==revision||!state)return;
         if(data.source!=='verified_contract'||data.authoritative!==true)throw new Error('Remittance provenance unavailable.');
         const target=document.getElementById('live-remittances');target.replaceChildren();
-        const summary=document.createElement('p');summary.textContent=`Discovery: confirmed event index (${data.indexing?.caught_up?'caught up':'catch-up pending'}); records read from contracts. Recent unconfirmed remittances may be absent; use ID lookup.`;target.append(summary);
-        if(!data.items.length){const p=document.createElement('p');p.textContent='No indexed wallet remittances available yet.';target.append(p);}
+        const summary=document.createElement('p');summary.textContent='Discovery: direct verified contract scan, newest first. History indexing is independent.';target.append(summary);
+        if(!data.items.length){const p=document.createElement('p');p.textContent='No remittances for this wallet in the verified contract snapshot.';target.append(p);}
         for(const item of data.items){const p=document.createElement('p');p.className='identifier';p.textContent=`#${item.id} · ${item.status} · ${item.amount.test_eth} test ETH · ${item.sender} → ${item.recipient}`;target.append(p);}
       }catch(error){if(ticket===revision){text('live-remittances',`Live remittance list unavailable. ${friendlyError(error)}`);if(error.code==='AUTH_REQUIRED')onError(error);}}
     }

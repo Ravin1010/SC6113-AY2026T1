@@ -261,12 +261,21 @@ def pagination():
 def remittances():
     limit, offset = pagination()
     reader = get_reader()
-    progress = index_events(reader)
-    # Index identifies relevant IDs; every returned financial record is read from contracts.
-    rows = get_db().execute("SELECT DISTINCT remittance_id FROM indexed_events e JOIN indexed_transactions t USING(chain_id,deployment_id,tx_hash) WHERE e.chain_id=11155111 AND e.deployment_id=? AND e.remittance_id IS NOT NULL AND (t.sender_wallet=? OR t.recipient_wallet=?) ORDER BY length(remittance_id) DESC,remittance_id DESC LIMIT ? OFFSET ?",
-                            (reader.manifest['deploymentId'],g.wallet,g.wallet,limit,offset)).fetchall()
-    items = [reader.remittance(int(row[0])) for row in rows]
-    return jsonify(items=items, source='verified_contract', authoritative=True, discovery='confirmed_event_index', indexing=progress, limit=limit, offset=offset)
+    # Discover from the verified snapshot, independently of history/index catch-up.
+    admin = reader.admin.lower() == g.wallet
+    items = []
+    matched = 0
+    for identifier in range(reader.count, 0, -1):
+        item = reader.remittance(identifier)
+        if not admin and g.wallet not in (item['sender'].lower(), item['recipient'].lower()):
+            continue
+        if matched >= offset:
+            items.append(item)
+        matched += 1
+        if len(items) == limit:
+            break
+    return jsonify(items=items, source='verified_contract', authoritative=True,
+                   discovery='direct_contract_scan', limit=limit, offset=offset)
 
 
 @api.get('/remittances/<int:remittance_id>')

@@ -229,3 +229,47 @@ events per driver**, repeat indexing unchanged), and `git diff --check`.
 Hosted lifecycle transactions remain paused; no MetaMask transaction, schema
 change, secret change, smart-contract redeployment, main merge, or Iteration 7.
 This remains a checkpoint correction, not final Iteration 6B approval.
+
+## Second hosted checkpoint correction: authoritative remittance discovery
+
+Base: `b5f3332bb933f637cdbbc1d047a68dff6bb741df`, on the same 6B branch.
+The owner reported hosted account, balance and history HTTP 200 responses but
+remittance-list HTTP 503 while the clean/partial Turso index caught up.
+
+`GET /api/remittances` now discovers directly from the verified reader's
+`remittanceCount`, scanning IDs newest-first through `reader.remittance(id)`.
+The verified immutable Admin address permits all records; ordinary wallets see
+only records naming them as sender or recipient, independently of current role
+revocation. Offset/limit apply after filtering, and scanning stops when the page
+is filled. Each financial record and reservation comes from the verified,
+block-pinned contract reader with its existing snapshot/reorg checks. Responses
+use `source: verified_contract`, `authoritative: true` and
+`discovery: direct_contract_scan`. An empty index is not consulted, populated,
+or required. A direct contract/RPC failure still fails closed with structured
+503; index failure alone cannot block this endpoint.
+
+The frontend labels direct contract discovery and its authoritative empty state.
+It no longer describes remittance discovery as partial indexed history. Existing
+browser snapshots, cache invalidation and deduplication are unchanged.
+`/api/transactions`, the bounded resumable indexer, its receipt/block validation,
+atomic checkpoints and reorg semantics are unchanged. History remains
+non-authoritative and best-effort, returning partial progress or `live_error`.
+Earlier correction notes about index-dependent remittance discovery describe
+the previous checkpoint and are superseded by this section.
+
+Verification: 116 Python tests, including 12 new direct-discovery regressions
+(empty index, failing index, participant/Admin filtering, ordering, filtered
+pagination, direct financial reads, zero count, structured reader failure and
+unchanged history indexing). Browser regressions: 48 full-suite checks plus one new focused check (49 passed),
+cover existing navigation/cache,
+authentication and transaction refresh behavior plus direct discovery wording.
+Local-chain checks run with both sqlite3 and libsql: 10 assertions and 12
+canonical events per driver; completed/cancelled remittances are listed before
+index initialization, and repeat indexing remains idempotent.
+
+Direct scanning is intentionally suitable for the current small coursework
+remittance count; it is not a high-volume search architecture. Hosted
+post-deploy authenticated recheck remains an owner checkpoint. No additional
+MetaMask writes are required or performed for this correction. No Solidity,
+Turso schema, secret, contract deployment, Render configuration, main merge,
+or Iteration 7 change is included.

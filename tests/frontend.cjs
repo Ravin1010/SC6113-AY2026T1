@@ -266,7 +266,7 @@ async function verifiedRoutes(page,{admin=true,sender=true,paused=false,wired=tr
   await page.route('**/api/users/me',route=>route.fulfill({json:{wallet:account.address,roles:{available:true,source:'verified_contract',admin,sender,recipient:false},deployment}}));
   await page.route('**/api/users/me/balances',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1000000000000000000',test_eth:'1'},reserved:{wei:'0',test_eth:'0'},deployment}}));
   await page.route('**/api/users/roles/**',route=>route.fulfill({json:{available:true,source:'verified_contract',sender:targetSender,recipient:targetRecipient}}));
-  await page.route('**/api/remittances?*',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,items:[],indexing:{caught_up:true}}}));
+  await page.route('**/api/remittances?*',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,items:[],discovery:'direct_contract_scan'}}));
   await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:claim?'0x'+'e'.repeat(40):account.address,recipient:claim?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},status:'PENDING'}}));
   await page.route('**/api/transactions?*',route=>route.fulfill({json:{source:'sqlite_index',authoritative:false,live_blockchain_checked:true,indexing_available:true,items:[]}}));
   await page.route('**/api/transactions/*/receipt',route=>route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:6,transaction_hash:'0x'+'f'.repeat(64)}}));
@@ -454,4 +454,16 @@ test('logout/account change clears persisted snapshot; new login performs a fres
   await page.locator('#logout').click();await waitFor(()=>page.locator('#login').isVisible());assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1')),null);
   await login(page);await page.waitForLoadState('networkidle');assert.equal(counts.balance,2);
   await page.evaluate(()=>window.__emitWallet('accountsChanged',['0x'+'d'.repeat(40)]));await waitFor(()=>page.locator('#login').isVisible());assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1')),null);await context.close();
+});
+
+test('remittance list describes direct contract discovery independently of history catch-up',async()=>{
+  const {page,context}=await pageWithWallet('live-test');
+  await verifiedRoutes(page);
+  await guest(page);await login(page);
+  await waitFor(async()=>(await page.locator('#live-remittances').textContent()).includes('direct verified contract scan'));
+  const text=await page.locator('#live-remittances').textContent();
+  assert.ok(text.includes('History indexing is independent.'));
+  assert.ok(text.includes('No remittances for this wallet in the verified contract snapshot.'));
+  assert.ok(!text.includes('catch-up pending'));
+  await context.close();
 });
