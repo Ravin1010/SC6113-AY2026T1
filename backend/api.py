@@ -14,7 +14,7 @@ from eth_utils import is_address, is_checksum_address, to_checksum_address
 from flask import Blueprint, current_app, g, jsonify, request, session
 from werkzeug.exceptions import HTTPException
 from .blockchain import unavailable_state, get_reader, BlockchainError, configuration_status
-from .indexer import index_events
+from .indexer import index_events, index_receipt
 from .preparation import prepare
 from .database import get_db
 from web3.exceptions import Web3Exception
@@ -291,9 +291,14 @@ def remittance(remittance_id):
 
 
 def history_items(limit, offset, deployment, audit=False):
-    condition = '' if audit else ' AND (sender_wallet=? OR recipient_wallet=?)'
-    parameters = [11155111,deployment] + ([] if audit else [g.wallet,g.wallet]) + [limit,offset]
-    rows = get_db().execute('SELECT * FROM indexed_transactions WHERE chain_id=? AND deployment_id=?'+condition+' ORDER BY block_number DESC,tx_hash LIMIT ? OFFSET ?', parameters).fetchall()
+    # Wrapper/batch receipts may involve more than two participants. Scope against
+    # the server-decoded events too; the compact transaction row is not exhaustive.
+    fields = ('sender', 'recipient', 'owner', 'admin', 'wallet')
+    participant = ' OR '.join(f"lower(json_extract(e.payload_json,'$.args.{field}'))=?" for field in fields)
+    condition = '' if audit else (' AND (sender_wallet=? OR recipient_wallet=? OR EXISTS '
+        '(SELECT 1 FROM indexed_events e WHERE e.chain_id=t.chain_id AND e.deployment_id=t.deployment_id AND e.tx_hash=t.tx_hash AND ('+participant+')))')
+    parameters = [11155111,deployment] + ([] if audit else [g.wallet] * (2 + len(fields))) + [limit,offset]
+    rows = get_db().execute('SELECT t.* FROM indexed_transactions t WHERE chain_id=? AND deployment_id=?'+condition+' ORDER BY block_number DESC,tx_hash LIMIT ? OFFSET ?', parameters).fetchall()
     result = []
     for row in rows:
         item = dict(row)
@@ -354,6 +359,7 @@ def receipt(tx_hash):
         wallet_related = str(result['from']).lower() == g.wallet or participant
         if not deployment_related or (not wallet_related and not reader.user(g.wallet)['admin']):
             raise APIError(403, 'TRANSACTION_ACCESS_DENIED', 'Receipt is not for this wallet/deployment.')
+    result['activity_indexed'] = index_receipt(reader, result)
     return jsonify(result)
 
 

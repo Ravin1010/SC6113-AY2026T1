@@ -95,7 +95,7 @@ async function loadHistory(ticket) {
     const data = await viewRead(`/api/transactions?limit=${historyLimit}&offset=${historyOffset}`,requestAPI);
     if (ticket !== generation || !session) return;
     if (data.source !== 'sqlite_index' || data.authoritative !== false || typeof data.live_blockchain_checked !== 'boolean' || !Array.isArray(data.items)) throw new Error('History provenance could not be confirmed. No records are displayed.');
-    setText('history-provenance', `Source: cached SQLite index · Not authoritative · Live blockchain ${data.live_blockchain_checked ? 'checked' : 'not checked'} · ${data.indexing_available ? 'Indexed data available' : 'Indexer not active'}.`);
+    setText('history-provenance', `Source: cached SQLite index · Not authoritative · Live blockchain ${data.live_blockchain_checked ? 'checked' : 'not checked'} · ${data.indexing?.caught_up===true ? 'Historical catch-up complete' : 'Historical catch-up incomplete; newly verified app receipts may already be listed'}.`);
     setText('history-status', data.items.length ? `${data.items.length} indexed record(s) on this page.` : historyOffset ? 'No indexed transactions on this page.' : 'No indexed transactions available yet. This does not establish that blockchain history is empty.');
     byId('history-records').replaceChildren(...data.items.map(historyCard));
     previous.disabled = historyOffset === 0; next.disabled = data.items.length < historyLimit;
@@ -206,7 +206,7 @@ async function refreshSelective(options) {
 }
 
 const live = setupLive(() => session, handleError, refreshSelective);
-setupForms(() => session?.wallet || '');
+setupForms(() => session?.wallet || '', () => live.isSending());
 window.ethereum?.on?.('accountsChanged', async () => {
   const old = session; generation++; clearCache(); displaySession(null);
   notice('Your selected wallet changed. Sign in again with the intended account.', true);

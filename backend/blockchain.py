@@ -189,6 +189,8 @@ class SepoliaReader:
             receipt = self.web3.eth.get_transaction_receipt(tx_hash)
         except TransactionNotFound:
             return {'transaction_hash': tx_hash, 'status': 'PENDING_OR_NOT_FOUND', 'source': 'verified_rpc'}
+        if hex_value(receipt['transactionHash']).lower() != tx_hash.lower():
+            raise BlockchainError('RECEIPT_LOG_MISMATCH', 'Receipt does not match the requested transaction.')
         transaction = self.web3.eth.get_transaction(tx_hash)
         deployed = {contract.address.lower(): (name, contract) for name, contract in self.contracts.items()}
         logs = []
@@ -199,10 +201,12 @@ class SepoliaReader:
             name, contract = match
             events = {hex_value(event_abi_to_log_topic(abi)): abi for abi in contract.abi if abi['type'] == 'event'}
             abi = events.get(hex_value(log['topics'][0]))
-            if abi is None or log['blockHash'] != receipt['blockHash'] or log['transactionHash'] != receipt['transactionHash']:
+            if (abi is None or log.get('removed') or log['blockNumber'] != receipt['blockNumber']
+                    or log['blockHash'] != receipt['blockHash'] or log['transactionHash'] != receipt['transactionHash']):
                 raise BlockchainError('RECEIPT_LOG_MISMATCH', 'Deployment event does not match this receipt.')
             event = get_event_data(self.web3.codec, abi, log)
             logs.append({'contract': name, 'event': event['event'], 'args': dict(event['args']), 'log_index': log['logIndex']})
+        self.ensure_snapshot()
         return {'transaction_hash': hex_value(receipt['transactionHash']), 'status': 'CONFIRMED' if receipt['status'] else 'FAILED',
                 'from': transaction['from'], 'to': transaction['to'], 'block_number': receipt['blockNumber'],
                 'block_hash': hex_value(receipt['blockHash']), 'confirmations': max(0, self.block-receipt['blockNumber']+1),

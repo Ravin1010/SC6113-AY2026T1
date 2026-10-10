@@ -9,7 +9,56 @@ const text = (id,value) => { const element=document.getElementById(id); if(eleme
 export const toWei = value => {const [whole,decimal='']=value.trim().split('.');return (BigInt(whole)*10n**18n+BigInt(decimal.padEnd(18,'0'))).toString();};
 
 export function setupLive(getSession, onError, refresh) {
-  let state=null, revision=0, sending=false;
+  let state=null, revision=0, sending=false, pending=null, verifying=false;
+  const pendingKey=(wallet,deployment)=>`sc6113-pending:${wallet.toLowerCase()}:${chain}:${deployment}`;
+  function savePending(){try{sessionStorage.setItem(pendingKey(pending.wallet,pending.deployment),JSON.stringify(pending));}catch{}}
+  function reportPending(message,retry=false){
+    const button=buttons().find(button=>button.dataset.blockchainAction===pending.action);
+    const output=button?.closest('form')?.querySelector('.form-result')||document.getElementById('transaction-status')||document.querySelector('.form-result');
+    if(!output)return;
+    output.textContent=`${message} ${pending.hash}`;
+    const link=document.createElement('a');link.href=`https://sepolia.etherscan.io/tx/${pending.hash}`;link.target='_blank';link.rel='noopener';link.textContent='View Sepolia transaction';output.append(' ',link);
+    if(retry){const check=document.createElement('button');check.type='button';check.dataset.verifyTransaction='';check.textContent='Check transaction';check.addEventListener('click',()=>verifyPending());output.append(' ',check);}
+  }
+  function completePending(){
+    try{sessionStorage.removeItem(pendingKey(pending.wallet,pending.deployment));}catch{}
+    pending=null;sending=false;
+  }
+  async function verifyPending(){
+    if(verifying||!pending||getSession()?.wallet.toLowerCase()!==pending.wallet)return;
+    verifying=true;sending=true;disable();const operation=pending,session=getSession();
+    reportPending('Transaction submitted. Checking authoritative confirmation:');
+    try{
+      for(let count=0;count<20;count++){
+        if(pending!==operation||getSession()!==session)return;
+        await new Promise(resolve=>setTimeout(resolve,1500));
+        let receipt;
+        try{receipt=await requestAPI(`/api/transactions/${operation.hash}/receipt`);}
+        catch(error){
+          reportPending('Transaction submitted. Verification temporarily unavailable; retrying/checking authoritative state.',true);
+          if(error.code==='AUTH_REQUIRED')onError(error);
+          return;
+        }
+        if(receipt.canonical===true&&receipt.confirmations>=6){
+          if(receipt.status==='FAILED'){
+            reportPending('Transaction reverted:');completePending();await evaluate();return;
+          }
+          if(receipt.status==='CONFIRMED'){
+            // Keep the lock until BOTH confirmation and the post-state refresh succeed.
+            await refreshAffected(operation.action,operation.args,session);
+            if(pending!==operation||getSession()!==session)return;
+            if(!basic())throw new Error('Authoritative post-transaction state is temporarily unavailable.');
+            reportPending(`Confirmed (${receipt.confirmations} confirmations):`);
+            completePending();await evaluate();return;
+          }
+        }
+        reportPending(`Transaction submitted. Confirmation pending (${receipt.confirmations||0}/6):`,true);
+      }
+      reportPending('Transaction submitted. Verification is still pending; check authoritative state again.',true);
+    }catch(error){
+      if(pending===operation){reportPending('Transaction submitted. Verification temporarily unavailable; retrying/checking authoritative state.',true);if(error.code==='AUTH_REQUIRED')onError(error);}
+    }finally{verifying=false;}
+  }
   const lookups=new Map();
   function lookup(path){
     const cached=lookups.get(path);
@@ -62,6 +111,15 @@ export function setupLive(getSession, onError, refresh) {
     const deployment=balances?.deployment;
     if(!deployment?.deployment_verified || account.roles?.available!==true || account.roles.source!=='verified_contract' || balances.source!=='verified_contract' || balances.authoritative!==true){invalidate();return;}
     state={roles:account.roles,balances,connection,deployment};
+    if(!pending || pending.wallet!==getSession()?.wallet.toLowerCase() || pending.deployment!==deployment.deployment_id){
+      pending=null;
+      try{const saved=JSON.parse(sessionStorage.getItem(pendingKey(getSession().wallet,deployment.deployment_id)));
+        if(saved?.wallet===getSession().wallet.toLowerCase()&&saved.deployment===deployment.deployment_id&&/^0x[0-9a-f]{64}$/i.test(saved.hash)&&contractFor[saved.action])pending=saved;
+      }catch{}
+      sending=Boolean(pending);
+    }
+    if(pending)reportPending('Transaction submitted. Verification pending; check authoritative state.',!verifying);
+
     text('role-status', [account.roles.sender?'Sender':null,account.roles.recipient?'Recipient':null,account.roles.admin?'Admin / Auditor':null].filter(Boolean).join(', ') || 'No ordinary role authorized');
     document.querySelectorAll('[data-deployment-status]').forEach(el=>el.textContent=`Verified Sepolia deployment · ${deployment.wired?'Permanently wired':'Not wired — actions disabled'} · ${deployment.paused?'Paused':'Unpaused'}`);
     text('deployment-detail',`Deployment ${deployment.deployment_id} · verified at block ${deployment.block_number} · Admin ${deployment.admin}`);
@@ -84,6 +142,11 @@ export function setupLive(getSession, onError, refresh) {
     // One confirmed transaction => one invalidation and one shared fresh load.
     // ID/role lookups are reevaluated against the new snapshot, including exits.
     await refresh({confirmed:true,action,args});
+    if(getSession()===expected && ['claim','cancel'].includes(action)){
+      const item=await lookup('/api/remittances/'+encodeURIComponent(args.remittance_id));
+      if(item.source!=='verified_contract'||item.authoritative!==true||item.status!==(action==='claim'?'COMPLETED':'CANCELLED'))throw new Error('Authoritative remittance completion is not verified yet.');
+      text('remittance-detail',`#${item.id}: ${item.status} · ${item.amount.test_eth} test ETH · ${item.sender} → ${item.recipient}`);
+    }
   }
   function argumentsFor(action,form){
     const args={};
@@ -97,7 +160,7 @@ export function setupLive(getSession, onError, refresh) {
     if(button.disabled||sending||!basic())return;
     const action=button.dataset.blockchainAction,form=button.closest('form'),session=getSession(),snapshot=state,ticket=revision;
     const output=form?.querySelector('.form-result')||document.getElementById('transaction-status');
-    let submittedHash=null, confirmed=false;
+    let submittedHash=null;
     const args=argumentsFor(action,form);
     const report=value=>{if(output){output.textContent=value;if(submittedHash){const link=document.createElement('a');link.href=`https://sepolia.etherscan.io/tx/${submittedHash}`;link.target='_blank';link.rel='noopener';link.textContent='View Sepolia transaction';output.append(' ',link);}}};
     sending=true;disable();
@@ -110,23 +173,18 @@ export function setupLive(getSession, onError, refresh) {
       report(`Review ${action} in MetaMask. Estimated gas: ${prepared.gas_estimate}.`);
       const hash=await window.ethereum.request({method:'eth_sendTransaction',params:[tx]});
       if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new Error('Wallet returned an invalid transaction hash. Check MetaMask before retrying.');
-      submittedHash=hash;report(`Submitted; confirmation pending: ${hash}`);
-      // Bounded receipt polling; a hash alone is never presented as success.
-      for(let count=0;count<20;count++){
-        if(!state||getSession()!==session)break;
-        await new Promise(resolve=>setTimeout(resolve,1500));
-        const receipt=await requestAPI(`/api/transactions/${hash}/receipt`);
-        if(receipt.status==='FAILED'){report(`Transaction reverted: ${hash}`);break;}
-        if(receipt.status==='CONFIRMED'&&receipt.canonical===true&&receipt.confirmations>=6){confirmed=true;report(`Confirmed (${receipt.confirmations} confirmations): ${hash}`);break;}
-        report(`Confirmation pending (${receipt.confirmations||0}/6): ${hash}`);
-      }
-    }catch(error){report(error.code===4001?'MetaMask request cancelled. No transaction was submitted.':friendlyError(error));if(error.code==='AUTH_REQUIRED')onError(error);}
-    finally{
-      sending=false;
-      try{if(confirmed)await refreshAffected(action,args,session);else await evaluate();}
-      catch(error){invalidate();onError(error);}
+      submittedHash=hash;
+      pending={hash,action,args,wallet:session.wallet.toLowerCase(),deployment:snapshot.deployment.deployment_id};savePending();
+      await verifyPending();
+    }catch(error){
+      if(submittedHash){reportPending('Transaction submitted. Verification temporarily unavailable; check authoritative state.',true);}
+      else{report(error.code===4001?'MetaMask request cancelled. No transaction was submitted.':friendlyError(error));if(error.code==='AUTH_REQUIRED')onError(error);}
+    }finally{
+      // A submitted, unresolved transaction must never return to submit eligibility.
+      if(!pending){sending=false;await evaluate();}
     }
   }
+
   buttons().forEach(button=>button.addEventListener('click',()=>submit(button)));
   let timer;document.querySelectorAll('form[data-preview]').forEach(form=>form.addEventListener('input',()=>{revision++;disable();clearTimeout(timer);timer=setTimeout(evaluate,300);}));
   document.getElementById('switch-sepolia')?.addEventListener('click',async()=>{try{await window.ethereum?.request({method:'wallet_switchEthereumChain',params:[{chainId:chain}]});if(state && state.connection.chainId!==chain)await refresh();}catch(error){onError(error);}});

@@ -273,3 +273,70 @@ post-deploy authenticated recheck remains an owner checkpoint. No additional
 MetaMask writes are required or performed for this correction. No Solidity,
 Turso schema, secret, contract deployment, Render configuration, main merge,
 or Iteration 7 change is included.
+
+## Final narrow hosted correction: immediate receipt evidence and safe verification retry
+
+Base: `83c5671498001ee23ea745b6fef398b6b3288126`, same 6B branch.
+The owner completed the hosted lifecycle: Sender/Recipient authorized, Sender
+deposited, remittance #3 created and claimed. Owner-reported authoritative read:
+`#3 COMPLETED`, `reservation_active: false`. Claim transaction:
+`0x23fd98f2e04e8f7b47eae0117a25935c6b90b618a560f4de81de57614b02a73c`.
+These existing live results are preserved; this correction performs no Sepolia
+writes and does not claim a new independent hosted wallet smoke test.
+
+The authenticated receipt endpoint now atomically upserts successful canonical
+receipts after the configured confirmation threshold (six), together with only
+events decoded server-side from verified deployment contracts. A shared history
+writer produces the same transaction/event fields and JSON provenance for the
+receipt path and historical log path. Duplicate verification/backfill remains
+idempotent; re-included transaction evidence updates canonical block fields.
+Receipt hash, removed-log and block correspondence checks fail closed. The
+receipt fast path never writes `indexing_state`, so isolated recent evidence
+cannot skip historical ranges. Authorization precedes persistence. Batch/wrapper
+history visibility also checks decoded event participant addresses, since a
+single transaction's two participant columns cannot describe every batch event.
+No schema changes, browser-supplied events, or financial database authority.
+Historical catch-up retains its budget, RPC deduplication, safe atomic chunks,
+checkpoint continuation and reorg fences/reset. Activity explicitly distinguishes
+incomplete catch-up from recent verified receipts already available in the index.
+Direct `/api/remittances` discovery remains unchanged and independent of history.
+
+After MetaMask returns a valid hash, the interface preserves it and its explorer
+link, locks blockchain submission while unresolved, and records only non-secret
+pending metadata in tab sessionStorage scoped to wallet, Sepolia and deployment.
+A receipt/storage/RPC failure offers **Check transaction**, which only repeats
+verification; it never re-prepares, signs or resubmits a transaction. The lock
+survives route navigation. Input preview cannot overwrite this transaction
+notice. Bounded pending-confirmation polling does not unlock on timeout. A
+canonical failed receipt with six confirmations unlocks; a successful receipt
+unlocks only after the authoritative post-state refresh succeeds. Claim/cancel
+specifically re-read and require the terminal remittance state. Temporary
+post-state failures retain the same hash and lock for a verification-only retry.
+No full reload is reintroduced for ordinary navigation/focus; accepted browser
+snapshot caching and confirmed-action refresh rules remain intact.
+
+Final correction regressions:
+- **126 Python tests**: confirmed receipt insertion, duplicate/backfill
+  idempotence, atomic rollback, unmoved checkpoints, wrapper/multiple participant
+  scoping, partial/unavailable history, receipt validation and existing direct
+  remittance discovery, database and authentication regressions.
+- **52 browser tests**: receipt and post-state outages preserve hash/lock,
+  verification retry uses exactly one original wallet submission, authoritative
+  terminal state refresh, navigation recovery, definitive failure unlock, plus
+  existing account/network/session/cache/mobile regressions. Wallet writes here
+  are controlled mocks, not Sepolia transactions.
+- Local HTTP/EVM integration with **sqlite3 and libsql**: **14 assertions** and
+  **12 canonical events per driver**; confirmed claim receipt inserts two events
+  before backfill, duplicate receipt verification is unchanged, Activity can
+  expose the receipt while history is partial, and backfill stays idempotent.
+- Solidity **0.8.34**, three contracts compiled, zero warnings; **10 sanity
+  groups / 50 expected rejection checks** pass. Solidity sources unchanged.
+- Dependency check and `git diff --check` pass; committed runtime `user.db`
+  unchanged. No secrets, schema, contract deployment, Render architecture, main,
+  formal report, slide or Iteration 7 changes.
+
+This is a correction checkpoint. Render auto-deploy follows the branch push;
+post-deploy authenticated read verification remains separate. Previously
+submitted hashes may be checked through the receipt endpoint without another
+wallet transaction. Non-authoritative indexed evidence may still lag for older
+transactions not individually verified; bounded historical backfill continues.

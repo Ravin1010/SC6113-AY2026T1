@@ -2,6 +2,7 @@
 import json
 import hashlib
 import time
+from unittest.mock import patch
 import os
 import sys
 from pathlib import Path
@@ -32,9 +33,17 @@ with app.test_request_context():
     response=client.get('/api/remittances?limit=20&offset=0')
     assert response.status_code==200 and response.json['discovery']=='direct_contract_scan'
     assert [(i['id'],i['status']) for i in response.json['items']]==[('2','CANCELLED'),('1','COMPLETED')]
+    receipt=client.get('/api/transactions/'+value['claimHash']+'/receipt')
+    assert receipt.status_code==200 and receipt.json['activity_indexed']
+    assert db.execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0]==2 and db.execute('SELECT COUNT(*) FROM indexing_state').fetchone()[0]==0
+    client.get('/api/transactions/'+value['claimHash']+'/receipt')
+    assert db.execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0]==2
+    with patch('backend.api.index_events',return_value={'caught_up':False}):
+        activity=client.get('/api/transactions')
+    assert activity.status_code==200 and len(activity.json['items'])==1 and len(activity.json['items'][0]['events'])==2 and activity.json['authoritative'] is False
     progress=index_events(reader);assert progress['caught_up']
     before=get_db().execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0]
     assert before>=10
     index_events(reader);assert get_db().execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0]==before
     assert prepare(reader,value['sender'],'withdraw',{'amount_wei':'1'},lambda a:a)['unsigned']
-    print(f'Local HTTP integration ({os.getenv("LOCAL_DB_DRIVER", "sqlite3")}): 10 assertions passed; {before} canonical events indexed, repeat run unchanged. No Sepolia access.')
+    print(f'Local HTTP integration ({os.getenv("LOCAL_DB_DRIVER", "sqlite3")}): 14 assertions passed; {before} canonical events indexed, repeat run unchanged. No Sepolia access.')

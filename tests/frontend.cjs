@@ -43,7 +43,7 @@ async function pageWithWallet(mode = 'normal', width = 1280) {
         if (window.__walletMode === 'reject-connect' && method === 'eth_requestAccounts') throw {code: 4001};
         if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [window.__walletAddress];
         if (method === 'eth_chainId') return window.__walletChain || '0xaa36a7';
-        if (method === 'eth_sendTransaction' && window.__walletMode === 'live-test') {window.__sent= params[0]; return '0x'+'f'.repeat(64);}
+        if (method === 'eth_sendTransaction' && window.__walletMode === 'live-test') {window.__sendCount=(window.__sendCount||0)+1;window.__sent= params[0]; return '0x'+'f'.repeat(64);}
         if (method === 'eth_sendTransaction' && window.__walletMode === 'reject-tx') throw {code:4001};
         if (method === 'personal_sign') {
           if (window.__walletMode === 'reject-sign') throw {code: 4001};
@@ -262,16 +262,17 @@ test('no historical contract code, wallet transactions or browser exceptions', (
 const {Interface} = require('ethers');
 const fixtureAddresses={RoleRegistry:'0x'+'1'.repeat(40),deposit_money:'0x'+'2'.repeat(40),paynow:'0x'+'3'.repeat(40)};
 async function verifiedRoutes(page,{admin=true,sender=true,paused=false,wired=true,targetSender=false,targetRecipient=true,claim=false}={}) {
+  let lastAction=null,complete=false;
   const deployment={deployment_verified:true,wired,paused,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20};
   await page.route('**/api/users/me',route=>route.fulfill({json:{wallet:account.address,roles:{available:true,source:'verified_contract',admin,sender,recipient:false},deployment}}));
   await page.route('**/api/users/me/balances',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1000000000000000000',test_eth:'1'},reserved:{wei:'0',test_eth:'0'},deployment}}));
   await page.route('**/api/users/roles/**',route=>route.fulfill({json:{available:true,source:'verified_contract',sender:targetSender,recipient:targetRecipient}}));
   await page.route('**/api/remittances?*',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,items:[],discovery:'direct_contract_scan'}}));
-  await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:claim?'0x'+'e'.repeat(40):account.address,recipient:claim?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},status:'PENDING'}}));
+  await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:claim?'0x'+'e'.repeat(40):account.address,recipient:claim?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},status:complete&&['claim','cancel'].includes(lastAction)?(lastAction==='claim'?'COMPLETED':'CANCELLED'):'PENDING'}}));
   await page.route('**/api/transactions?*',route=>route.fulfill({json:{source:'sqlite_index',authoritative:false,live_blockchain_checked:true,indexing_available:true,items:[]}}));
-  await page.route('**/api/transactions/*/receipt',route=>route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:6,transaction_hash:'0x'+'f'.repeat(64)}}));
+  await page.route('**/api/transactions/*/receipt',route=>{complete=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:6,activity_indexed:true,transaction_hash:'0x'+'f'.repeat(64)}});});
   await page.route('**/api/transactions/prepare',route=>{
-    const {action,arguments:args}=route.request().postDataJSON();
+    const {action,arguments:args}=route.request().postDataJSON();lastAction=action;
     const name=['authorizeSender','authorizeRecipient','revokeRole','pause','unpause'].includes(action)?'RoleRegistry':['deposit','withdraw'].includes(action)?'deposit_money':'paynow';
     const iface=new Interface(JSON.parse(readFileSync(join(repo,'static/abi',name+'.json'))));
     const parameters=action==='revokeRole'?[args.wallet,args.role]:['authorizeSender','authorizeRecipient'].includes(action)?[args.wallet]:action==='withdraw'?[args.amount_wei]:action==='transfer'?[args.wallet,args.amount_wei]:['claim','cancel'].includes(action)?[args.remittance_id]:[];
@@ -431,7 +432,7 @@ for(const status of ['rejected','failed'])test(`${status} transaction preserves 
   const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());const before={...counts};
   const cacheBefore=await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1'));
   await button.click();await waitFor(async()=>{const value=await page.locator('#deposit-result').textContent();return value.includes(status==='rejected'?'cancelled':'reverted');});
-  await page.waitForLoadState('networkidle');assert.deepEqual(counts,before);assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1')),cacheBefore);await context.close();
+  await page.waitForLoadState('networkidle');assert.deepEqual(counts,before);assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1')),cacheBefore);await waitFor(()=>button.isEnabled());await context.close();
 });
 test('deployment ID change rejects the previous cached snapshot',async()=>{
   const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);const counts=countReads(page);
@@ -465,5 +466,56 @@ test('remittance list describes direct contract discovery independently of histo
   assert.ok(text.includes('History indexing is independent.'));
   assert.ok(text.includes('No remittances for this wallet in the verified contract snapshot.'));
   assert.ok(!text.includes('catch-up pending'));
+  await context.close();
+});
+
+for(const failure of ['receipt','post-state'])test(`${failure} outage preserves submitted hash, locks writes and retries verification without resubmission`,async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page,{claim:true,sender:false});
+  let receipts=0,terminal=false,postFailed=false;
+  const deployment={deployment_verified:true,wired:true,paused:false,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20};
+  await page.route('**/api/transactions/*/receipt',route=>{
+    receipts++;
+    if(failure==='receipt'&&receipts===1)return route.fulfill({status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Temporary test outage'}}});
+    terminal=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:6,activity_indexed:true}});
+  });
+  await page.route('**/api/users/me/balances',route=>{
+    if(terminal&&failure==='post-state'&&!postFailed){postFailed=true;return route.fulfill({status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Temporary post-state outage'}}});}
+    return route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1',test_eth:'0.000000000000000001'},reserved:{wei:terminal?'0':'1',test_eth:terminal?'0':'0.000000000000000001'},deployment}});
+  });
+  await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:'0x'+'e'.repeat(40),recipient:account.address,amount:{wei:'1',test_eth:'0.000000000000000001'},status:terminal?'COMPLETED':'PENDING',reservation_active:!terminal}}));
+  await guest(page,'/transferMoney');await login(page);await page.locator('#remittance-id').fill('1');
+  const button=page.locator('[data-blockchain-action="claim"]');await waitFor(()=>button.isEnabled());await button.click();
+  await waitFor(async()=> (await page.locator('[data-verify-transaction]').count())===1);
+  const result=page.locator('#manage-result');
+  assert.ok((await result.textContent()).includes('Verification temporarily unavailable'));
+  assert.ok((await result.textContent()).includes('0x'+'f'.repeat(64)));
+  assert.ok(await button.isDisabled());assert.equal(await page.evaluate(()=>window.__sendCount),1);
+  await page.locator('form[data-preview]').last().getByText('Check inputs').click();
+  assert.ok((await result.textContent()).includes('0x'+'f'.repeat(64)));
+  await page.locator('#remittance-id').fill('2');await pause(450);assert.ok(await button.isDisabled());
+  await page.locator('#remittance-id').fill('1');await pause(450);
+  await page.locator('[data-verify-transaction]').click();
+  await waitFor(async()=> (await page.locator('#remittance-detail').textContent()).includes('COMPLETED'));
+  await waitFor(async()=> (await result.textContent()).includes('Confirmed'));
+  assert.equal(await page.evaluate(()=>window.__sendCount),1);
+  assert.equal(receipts,2);
+  assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('sc6113-view-v1')).snapshot.balances.reserved.wei),'0');
+  assert.ok(await button.isDisabled());await context.close();
+});
+
+test('unresolved submitted receipt survives route navigation and only verification can retry',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+  let receipts=0;
+  await page.route('**/api/transactions/*/receipt',route=>{receipts++;return route.fulfill(receipts===1?{status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Unavailable'}}}:{json:{status:'FAILED',canonical:true,confirmations:6}});});
+  await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
+  const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());await button.click();
+  await waitFor(()=>page.locator('[data-verify-transaction]').isVisible());
+  await page.goto(origin+'/main');await page.waitForLoadState('networkidle');
+  assert.ok((await page.locator('#transaction-status').textContent()).includes('0x'+'f'.repeat(64)));
+  assert.equal(await page.locator('[data-blockchain-action]:not(:disabled)').count(),0);
+  await page.locator('[data-verify-transaction]').click();
+  await waitFor(async()=> (await page.locator('#transaction-status').textContent()).includes('reverted'));
+  assert.equal(receipts,2);
+  assert.deepEqual(await page.evaluate(()=>Object.keys(sessionStorage).filter(key=>key.startsWith('sc6113-pending:'))),[]);
   await context.close();
 });

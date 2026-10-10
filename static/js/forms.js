@@ -15,10 +15,11 @@ export function validationMessage(rule, value, sender = '') {
   return '';
 }
 
-export function setupForms(currentWallet) {
+export function setupForms(currentWallet, transactionPending = () => false) {
   document.querySelectorAll('form[data-preview]').forEach(form => {
     form.addEventListener('submit', event => {
       event.preventDefault(); // Preview-only: never POST a form or call a wallet transaction method.
+      if (transactionPending()) return; // Preserve submitted hash and verification controls.
       const inputs = Array.from(form.querySelectorAll('[data-rule]'));
       let firstInvalid;
       const errors = inputs.map(input => {

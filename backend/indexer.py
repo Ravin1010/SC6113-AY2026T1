@@ -28,6 +28,42 @@ class BudgetProvider(HTTPProvider):
         return values
 
 
+def store_event(db, deployment, tx_hash, block_number, block_hash, log_index,
+                event_type, args, name, address, initiator):
+    """Shared canonical history mapping, called inside the caller's transaction."""
+    sender = args.get('sender') or args.get('owner') or args.get('admin') or initiator
+    recipient = args.get('recipient') or args.get('wallet')
+    observed = int(time.time())
+    # An isolated verified receipt can be re-included at a different block.
+    db.execute('DELETE FROM indexed_events WHERE chain_id=11155111 AND deployment_id=? AND tx_hash=? AND block_hash<>?',
+               (deployment, tx_hash, block_hash))
+    db.execute('INSERT INTO indexed_transactions VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(chain_id,deployment_id,tx_hash) DO UPDATE SET sender_wallet=excluded.sender_wallet,recipient_wallet=COALESCE(excluded.recipient_wallet,recipient_wallet),block_number=excluded.block_number,block_hash=excluded.block_hash,receipt_status=excluded.receipt_status',
+               (11155111, deployment, tx_hash, sender.lower(), recipient.lower() if recipient else None, block_number, block_hash, 1, observed))
+    payload = {'contract': name, 'address': address, 'initiator': initiator, 'args': args}
+    db.execute('INSERT INTO indexed_events VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chain_id,deployment_id,tx_hash,log_index) DO UPDATE SET block_number=excluded.block_number,block_hash=excluded.block_hash,event_type=excluded.event_type,remittance_id=excluded.remittance_id,payload_json=excluded.payload_json',
+               (11155111, deployment, tx_hash, log_index, block_number, block_hash, event_type,
+                str(args['remittanceId']) if 'remittanceId' in args else None, json.dumps(payload), observed))
+
+
+def index_receipt(reader, receipt):
+    """Fast path for server-decoded confirmed receipts, without moving backfill checkpoints."""
+    confirmations = max(1, int(current_app.config['BLOCKCHAIN_CONFIRMATIONS']))
+    if (receipt.get('status') != 'CONFIRMED' or receipt.get('canonical') is not True
+            or receipt.get('confirmations', 0) < confirmations or not receipt.get('deployment_logs')):
+        return False
+    reader.ensure_snapshot()
+    db = get_db()
+    with db:
+        for event in receipt['deployment_logs']:
+            name = event['contract']
+            if receipt['block_number'] < reader.starts[name]:
+                raise BlockchainError('INDEX_RECONCILIATION_FAILED', 'Receipt event predates the verified deployment.')
+            store_event(db, reader.manifest['deploymentId'], receipt['transaction_hash'],
+                        receipt['block_number'], receipt['block_hash'], event['log_index'],
+                        event['event'], event['args'], name, reader.contracts[name].address, receipt['from'])
+    return True
+
+
 def index_events(reader):
     deadline = time.monotonic() + min(8., max(.05, float(current_app.config.get('BLOCKCHAIN_INDEX_SECONDS', 6))))
     # A dedicated short-timeout transport leaves authoritative contract reads unchanged.
@@ -110,9 +146,7 @@ def index_events(reader):
                     if tx_hash not in transactions:
                         transactions[tx_hash] = call(rpc.eth.get_transaction, tx_hash)
                     tx = transactions[tx_hash]
-                    sender = args.get('sender') or args.get('owner') or tx['from']
-                    recipient = args.get('recipient') or args.get('wallet')
-                    rows.append((log, event, args, tx_hash, sender, recipient, tx))
+                    rows.append((log, event, args, tx_hash, tx))
                 # These deliberate fresh reads are reorg fences, not redundant lookups.
                 if end_hash != hex_value(block(upper, fresh=True)['hash']) or reader.block_hash != hex_value(block(reader.block, fresh=True)['hash']):
                     raise BlockchainError('INDEX_RECONCILIATION_FAILED', 'Chain changed during indexing; chunk rolled back.')
@@ -120,13 +154,9 @@ def index_events(reader):
                     raise BudgetExhausted()
                 # Only a completely validated chunk advances durable progress.
                 with db:
-                    for log, event, args, tx_hash, sender, recipient, tx in rows:
-                        observed = int(time.time())
-                        db.execute('INSERT INTO indexed_transactions VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(chain_id,deployment_id,tx_hash) DO UPDATE SET recipient_wallet=COALESCE(excluded.recipient_wallet,recipient_wallet)',
-                                   (11155111, deployment, tx_hash, sender.lower(), recipient.lower() if recipient else None, log['blockNumber'], hex_value(log['blockHash']), 1, observed))
-                        payload = {'contract': name, 'address': contract.address, 'initiator': tx['from'], 'args': args}
-                        db.execute('INSERT INTO indexed_events VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chain_id,deployment_id,tx_hash,log_index) DO NOTHING',
-                                   (11155111, deployment, tx_hash, log['logIndex'], log['blockNumber'], hex_value(log['blockHash']), event['event'], str(args['remittanceId']) if 'remittanceId' in args else None, json.dumps(payload), observed))
+                    for log, event, args, tx_hash, tx in rows:
+                        store_event(db, deployment, tx_hash, log['blockNumber'], hex_value(log['blockHash']),
+                                    log['logIndex'], event['event'], args, name, contract.address, tx['from'])
                     db.execute('INSERT INTO indexing_state VALUES (?,?,?,?,?,?) ON CONFLICT(chain_id,deployment_id,contract_address) DO UPDATE SET last_block=excluded.last_block,last_block_hash=excluded.last_block_hash,updated_at=excluded.updated_at',
                                (11155111, deployment, contract.address.lower(), upper, end_hash, int(time.time())))
                 by_address[contract.address.lower()] = {'last_block': upper}

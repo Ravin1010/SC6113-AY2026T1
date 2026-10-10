@@ -15,11 +15,11 @@ const ganache=require('ganache'),{ethers}=require('ethers'),fs=require('node:fs'
   await (await contracts.RoleRegistry.authorizeSender(await sender.getAddress())).wait();await(await contracts.RoleRegistry.authorizeRecipient(await recipient.getAddress())).wait();
   await(await contracts.deposit_money.connect(sender).deposit({value:ethers.parseEther('0.003')})).wait();
   await(await contracts.paynow.connect(sender).transfer(await recipient.getAddress(),ethers.parseEther('0.001'))).wait();
-  await(await contracts.paynow.connect(recipient).claim(1)).wait();
+  const claimReceipt=await(await contracts.paynow.connect(recipient).claim(1)).wait();
   await(await contracts.paynow.connect(sender).transfer(await recipient.getAddress(),ethers.parseEther('0.001'))).wait();
   await(await contracts.paynow.connect(sender).cancel(2)).wait();
   for(let n=0;n<6;n++)await provider.send('evm_mine',[]);
-  const config={rpc:url,manifest:path.join(temp,'manifest.json'),database:path.join(temp,'test.db'),sender:await sender.getAddress(),recipient:await recipient.getAddress()};
+  const config={rpc:url,manifest:path.join(temp,'manifest.json'),database:path.join(temp,'test.db'),sender:await sender.getAddress(),recipient:await recipient.getAddress(),claimHash:claimReceipt.hash};
   const child=spawn(process.env.PYTHON||'python',[path.join(__dirname,'verify_local_chain.py')],{cwd:path.join(__dirname,'..'),stdio:['pipe','inherit','inherit']});child.stdin.end(JSON.stringify(config));const code=await new Promise(resolve=>child.on('exit',resolve));if(code!==0)throw new Error('Local HTTP integration failed');
  }finally{await server.close();fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(error=>{console.error(error);process.exitCode=1});
