@@ -1,6 +1,7 @@
 /* Verified reads and user-clicked MetaMask writes. No keys, signing library or ABI encoder. */
 import {requestAPI, postJSON, friendlyError} from './api.js';
 import {validationMessage} from './forms.js';
+import {viewRead} from './cache.js';
 const chain = '0xaa36a7';
 const adminActions = ['authorizeSender','authorizeRecipient','revokeRole','pause','unpause'];
 const contractFor = {authorizeSender:'RoleRegistry',authorizeRecipient:'RoleRegistry',revokeRole:'RoleRegistry',pause:'RoleRegistry',unpause:'RoleRegistry',deposit:'deposit_money',withdraw:'deposit_money',transfer:'paynow',claim:'paynow',cancel:'paynow'};
@@ -14,7 +15,7 @@ export function setupLive(getSession, onError, refresh) {
     const cached=lookups.get(path);
     if(cached && cached.expires>Date.now())return cached.promise;
     const entry={expires:Date.now()+30000};
-    entry.promise=requestAPI(path).catch(error=>{if(lookups.get(path)===entry)lookups.delete(path);throw error;});
+    entry.promise=viewRead(path,requestAPI).catch(error=>{if(lookups.get(path)===entry)lookups.delete(path);throw error;});
     lookups.set(path,entry);return entry.promise;
   }
   const buttons=()=>Array.from(document.querySelectorAll('[data-blockchain-action]'));
@@ -69,7 +70,7 @@ export function setupLive(getSession, onError, refresh) {
     await evaluate();
     if(list && document.getElementById('live-remittances')) {
       const ticket=revision;
-      try{const data=await requestAPI('/api/remittances?limit=20&offset=0');if(ticket!==revision||!state)return;
+      try{const data=await viewRead('/api/remittances?limit=20&offset=0',requestAPI);if(ticket!==revision||!state)return;
         if(data.source!=='verified_contract'||data.authoritative!==true)throw new Error('Remittance provenance unavailable.');
         const target=document.getElementById('live-remittances');target.replaceChildren();
         const summary=document.createElement('p');summary.textContent=`Discovery: confirmed event index (${data.indexing?.caught_up?'caught up':'catch-up pending'}); records read from contracts. Recent unconfirmed remittances may be absent; use ID lookup.`;target.append(summary);
@@ -79,21 +80,10 @@ export function setupLive(getSession, onError, refresh) {
     }
   }
   async function refreshAffected(action,args,expected){
-    if(!state || getSession()!==expected)return;
-    const snapshot=state;
-    let account={roles:snapshot.roles}, balances=snapshot.balances;
-    if(adminActions.includes(action)){
-      if(['pause','unpause'].includes(action) || args.wallet?.toLowerCase()===expected.wallet.toLowerCase())account=await requestAPI('/api/users/me');
-      if(args.wallet)lookups.delete('/api/users/roles/'+encodeURIComponent(args.wallet.toLowerCase()));
-      balances={...balances,deployment:{...balances.deployment,...account.deployment,paused:account.roles.paused ?? account.deployment?.paused ?? balances.deployment.paused}};
-    }else{
-      const path=args.remittance_id?'/api/remittances/'+encodeURIComponent(args.remittance_id):null;
-      if(path)lookups.delete(path);
-      [balances]=await Promise.all([requestAPI('/api/users/me/balances'),path?lookup(path):Promise.resolve()]);
-    }
-    if(state!==snapshot || getSession()!==expected)return;
-    await set(account,balances,snapshot.connection,{list:['transfer','claim','cancel'].includes(action)});
-    await refresh({history:true});
+    if(getSession()!==expected)return;
+    // One confirmed transaction => one invalidation and one shared fresh load.
+    // ID/role lookups are reevaluated against the new snapshot, including exits.
+    await refresh({confirmed:true,action,args});
   }
   function argumentsFor(action,form){
     const args={};
@@ -151,6 +141,5 @@ export function setupLive(getSession, onError, refresh) {
       if(!data.items.length)text('audit-records','No indexed audit transactions available yet.');
     }catch(error){if(ticket===revision){text('audit-records',friendlyError(error));if(error.code==='AUTH_REQUIRED')onError(error);}}
   });
-  window.ethereum?.on?.('chainChanged',invalidate);
   return {set,invalidate,isSending:()=>sending};
 }

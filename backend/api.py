@@ -108,12 +108,13 @@ def authenticated(function):
         token = session.get('auth_token')
         row = None
         if isinstance(token, str):
-            row = get_db().execute('SELECT wallet_address FROM auth_sessions WHERE token_hash=? AND revoked_at IS NULL AND expires_at>?',
+            row = get_db().execute('SELECT wallet_address,created_at FROM auth_sessions WHERE token_hash=? AND revoked_at IS NULL AND expires_at>?',
                                    (digest(token), now())).fetchone()
         if row is None:
             session.clear()
             raise APIError(401, 'AUTH_REQUIRED', 'A valid wallet session is required.')
         g.wallet = row['wallet_address']
+        g.session_started_at = row['created_at']
         return function(*args, **kwargs)
     return wrapped
 
@@ -193,13 +194,15 @@ def verify():
     session.clear()
     session.permanent = True
     session['auth_token'], session['csrf_token'] = token, secrets.token_hex(32)
-    return jsonify(authenticated=True, wallet=to_checksum_address(address), csrf_token=session['csrf_token'])
+    # Public presentation epoch only; this value cannot authenticate a request.
+    session['view_epoch'] = str(time.time_ns())
+    return jsonify(authenticated=True, wallet=to_checksum_address(address), csrf_token=session['csrf_token'], session_started_at=timestamp, session_view_epoch=session['view_epoch'])
 
 
 @api.get('/auth/session')
 @authenticated
 def current_session():
-    return jsonify(authenticated=True, wallet=to_checksum_address(g.wallet), csrf_token=session['csrf_token'])
+    return jsonify(authenticated=True, wallet=to_checksum_address(g.wallet), csrf_token=session['csrf_token'], session_started_at=g.session_started_at, session_view_epoch=session.get('view_epoch', str(g.session_started_at)))
 
 
 @api.post('/auth/logout')

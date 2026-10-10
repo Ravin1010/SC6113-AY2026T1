@@ -2,6 +2,8 @@ import {requestAPI, friendlyError, deploymentMessages} from './api.js';
 import {walletLogin, readSession, endSession, walletConnection} from './auth.js';
 import {setupForms} from './forms.js';
 import {setupLive} from './live.js';
+import {activateCache, clearCache, cachedState, storeState, viewRead} from './cache.js';
+const deploymentId=document.querySelector('meta[name="deployment-id"]')?.content||'';
 
 const byId = id => document.getElementById(id);
 let session = null, generation = 0, busy = false, historyOffset = 0;
@@ -31,7 +33,7 @@ function displaySession(value) {
 }
 
 function handleError(error) {
-  if (error.code === 'AUTH_REQUIRED') { generation++; displaySession(null); }
+  if (error.code === 'AUTH_REQUIRED') { generation++; clearCache(); displaySession(null); }
   notice(friendlyError(error), true);
 }
 
@@ -52,7 +54,11 @@ function deployment(error) {
 async function loadDeployment(ticket,account,connection) {
   try {
     const balances = await requestAPI('/api/users/me/balances');
-    if (ticket === generation) await live.set(account,balances,connection);
+    if (ticket === generation) {
+      // Keep the funding reader's current block/pause evidence intact.
+      storeState(account,balances);
+      await live.set(account,balances,connection);
+    }
   } catch (error) {
     if (ticket !== generation) return;
     if (error.code === 'AUTH_REQUIRED') throw error;
@@ -86,7 +92,7 @@ async function loadHistory(ticket) {
   setText('history-status', 'Loading indexed history…');
   byId('history-records').replaceChildren();
   try {
-    const data = await requestAPI(`/api/transactions?limit=${historyLimit}&offset=${historyOffset}`);
+    const data = await viewRead(`/api/transactions?limit=${historyLimit}&offset=${historyOffset}`,requestAPI);
     if (ticket !== generation || !session) return;
     if (data.source !== 'sqlite_index' || data.authoritative !== false || typeof data.live_blockchain_checked !== 'boolean' || !Array.isArray(data.items)) throw new Error('History provenance could not be confirmed. No records are displayed.');
     setText('history-provenance', `Source: cached SQLite index · Not authoritative · Live blockchain ${data.live_blockchain_checked ? 'checked' : 'not checked'} · ${data.indexing_available ? 'Indexed data available' : 'Indexer not active'}.`);
@@ -101,21 +107,28 @@ async function loadHistory(ticket) {
   }
 }
 
-async function loadAccount(ticket) {
-  const data = await requestAPI('/api/users/me');
-  if (ticket !== generation || !session) return;
-  if (data.wallet.toLowerCase() !== session.wallet.toLowerCase()) throw new Error('Wallet session changed. Reload and sign in again.');
-  setText('role-status', 'Role information unavailable until verified Sepolia deployment.');
-  // Iteration 5 deliberately cannot turn hypothetical future roles into enabled controls.
+async function loadAccount(ticket,force=false) {
   const connection = await walletConnection();
-  if (ticket !== generation) return;
-  setText('connected-wallet', connection.address);
-  setText('wallet-network', connection.network);
-  if (/^0x/i.test(connection.address) && connection.address.toLowerCase() !== session.wallet.toLowerCase()) {
-    notice('Your authenticated wallet differs from the connected wallet. Log out and sign in with the intended account.', true);
+  if(ticket!==generation || !session)return;
+  activateCache(session.wallet,connection.chainId,deploymentId,session.session_view_epoch??session.session_started_at);
+  if(force)clearCache();
+  setText('connected-wallet',connection.address);
+  setText('wallet-network',connection.network);
+  if(/^0x/i.test(connection.address)&&connection.address.toLowerCase()!==session.wallet.toLowerCase()){
+    clearCache();throw new Error('Your authenticated wallet differs from the connected wallet. Sign in again.');
   }
-  if (data.roles?.error) deployment(data.roles.error);
-  await Promise.all([loadDeployment(ticket,data,connection), loadHistory(ticket)]);
+  if(!['/main','/depositMoney','/transferMoney'].includes(window.location.pathname))return;
+  const cached=cachedState();
+  if(cached){setText('snapshot-status','Reusing a blockchain presentation snapshot. Refresh to check changes made by other wallets.');await Promise.all([live.set(cached.account,cached.balances,connection),loadHistory(ticket)]);return;}
+  setText('snapshot-status','Reading current verified blockchain state…');
+  const data=await requestAPI('/api/users/me');
+  if(ticket!==generation||!session)return;
+  if(data.wallet.toLowerCase()!==session.wallet.toLowerCase())throw new Error('Wallet session changed. Sign in again.');
+  setText('role-status','Role information unavailable until verified Sepolia deployment.');
+  if(data.roles?.error)deployment(data.roles.error);
+  await loadDeployment(ticket,data,connection);
+  setText('snapshot-status','Blockchain view checked. Navigation reuses this snapshot; Refresh checks for external changes.');
+  if(ticket===generation)await loadHistory(ticket);
 }
 
 let restoring=null;
@@ -128,7 +141,7 @@ async function restoreState() {
     await loadAccount(ticket);
   } catch (error) {
     if (ticket !== generation) return;
-    if (error.code === 'AUTH_REQUIRED') displaySession(null);
+    if (error.code === 'AUTH_REQUIRED') {clearCache();displaySession(null);}
     else { displaySession(null); notice(friendlyError(error), true); }
   }
 }
@@ -140,7 +153,7 @@ byId('login').addEventListener('click', async () => {
   try {
     const current = await walletLogin(() => ticket === generation);
     if (ticket !== generation) return;
-    displaySession(current); notice('Wallet session authenticated. Checking deployment and permissions…');
+    clearCache(); displaySession(current); notice('Wallet session authenticated. Checking deployment and permissions…');
     await loadAccount(ticket);
   } catch (error) { if (ticket === generation) handleError(error); }
   finally { setBusy(false); }
@@ -149,7 +162,7 @@ byId('login').addEventListener('click', async () => {
 byId('logout').addEventListener('click', async () => {
   if (busy || !session) return;
   generation++; setBusy(true);
-  try { await endSession(session.csrf_token); displaySession(null); notice('Logged out of this application. Your wallet may still be connected to MetaMask.'); }
+  try { await endSession(session.csrf_token); clearCache(); displaySession(null); notice('Logged out of this application. Your wallet may still be connected to MetaMask.'); }
   catch (error) { handleError(error); }
   finally { setBusy(false); }
 });
@@ -157,7 +170,7 @@ byId('logout').addEventListener('click', async () => {
 byId('refresh')?.addEventListener('click', async () => {
   if (!session || busy || live.isSending()) return;
   const ticket = ++generation; setBusy(true); notice('');
-  try { const current = await readSession(); if (ticket !== generation) return; displaySession(current); await loadAccount(ticket); }
+  try { const current = await readSession(); if (ticket !== generation) return; displaySession(current); await loadAccount(ticket,true); }
   catch (error) { if (ticket === generation) handleError(error); }
   finally { setBusy(false); }
 });
@@ -181,20 +194,27 @@ function restore() {
   if(!restoring)restoring=restoreState().finally(()=>{restoring=null;});
   return restoring;
 }
+let refreshing=null;
 async function refreshSelective(options) {
-  if(options?.history) return loadHistory(generation);
-  return restore();
+  if(options?.history)return loadHistory(generation);
+  if(!refreshing)refreshing=(async()=>{
+    clearCache();live.invalidate();
+    const ticket=++generation;
+    await loadAccount(ticket);
+  })().finally(()=>{refreshing=null;});
+  return refreshing;
 }
+
 const live = setupLive(() => session, handleError, refreshSelective);
 setupForms(() => session?.wallet || '');
 window.ethereum?.on?.('accountsChanged', async () => {
-  const old = session; generation++; displaySession(null);
+  const old = session; generation++; clearCache(); displaySession(null);
   notice('Your selected wallet changed. Sign in again with the intended account.', true);
   if (old) { try { await endSession(old.csrf_token); } catch (error) { if (error.code !== 'AUTH_REQUIRED') notice(`Wallet changed. ${friendlyError(error)} Log out again or retry before continuing.`, true); } }
 });
 window.ethereum?.on?.('chainChanged', async () => {
   // A network change invalidates the entire read context, even during a send.
-  generation++; live.invalidate();
+  generation++; clearCache(); live.invalidate();
   if(restoring) await restoring;
   if(session) await restore();
 });
@@ -207,7 +227,7 @@ function checkSession(){
     const expected=session;
     checkingSession=readSession().then(current=>{
       if(session!==expected)return;
-      if(current.wallet.toLowerCase()!==expected.wallet.toLowerCase())return restore();
+      if(current.wallet.toLowerCase()!==expected.wallet.toLowerCase()||current.session_started_at!==expected.session_started_at||current.session_view_epoch!==expected.session_view_epoch){clearCache();return restore();}
       Object.assign(expected,current);
     }).catch(handleError).finally(()=>{checkingSession=null;});
   }

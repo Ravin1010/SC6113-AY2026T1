@@ -14,9 +14,13 @@ def initialize(db):
 
 def get_db():
     if 'db' not in g:
-        db = sqlite3.connect(current_app.config['DATABASE'], timeout=10)
-        try:
+        if current_app.config.get('TURSO_DATABASE_URL'):
+            from .turso import Connection
+            db = Connection(current_app.config['TURSO_DATABASE_URL'], current_app.config.get('TURSO_AUTH_TOKEN', ''))
+        else:
+            db = sqlite3.connect(current_app.config['DATABASE'], timeout=10)
             db.row_factory = sqlite3.Row
+        try:
             db.execute('PRAGMA foreign_keys = ON')
             initialize(db)
         except sqlite3.Error:

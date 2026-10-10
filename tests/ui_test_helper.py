@@ -9,7 +9,7 @@ if len(sys.argv) > 1 and sys.argv[1] == 'server':
     from app import create_app
     port = int(os.environ['UI_TEST_PORT'])
     app = create_app({'TESTING': True, 'DATABASE': os.environ['UI_TEST_DB'],
-                      'SECRET_KEY': 'isolated-ui-test-only', 'AUTH_ORIGIN': f'http://127.0.0.1:{port}'})
+                      'BLOCKCHAIN_DEPLOYMENT_ID':'browser-fixture', 'SECRET_KEY': 'isolated-ui-test-only', 'AUTH_ORIGIN': f'http://127.0.0.1:{port}'})
     app.run(host='127.0.0.1', port=port, threaded=True, use_reloader=False)
 else:
     value = json.load(sys.stdin)

@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="deployment-id" content="{{ config.BLOCKCHAIN_DEPLOYMENT_ID }}">
   <meta name="color-scheme" content="light">
   <title>{% block title %}Remittance{% endblock %} · SC6113</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
-<body>
+<body data-page="{{ request.path }}">
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header">
     <div class="header-inner">
@@ -18,7 +19,7 @@
         <a href="/main" {% if request.path == '/main' %}aria-current="page"{% endif %}>Dashboard</a>
         <a href="/depositMoney" {% if request.path == '/depositMoney' %}aria-current="page"{% endif %}>Funding</a>
         <a href="/transferMoney" {% if request.path == '/transferMoney' %}aria-current="page"{% endif %}>Remittance</a>
-        <a href="/main#activity">Activity</a><a href="/main#admin">Admin</a><a href="/viewUser">User log</a>
+        <a href="/main#activity">Activity</a><a href="/main#admin">Admin</a><a href="/viewUser">User Log</a>
         <button id="logout" type="button" class="secondary" hidden>Log out</button>
       </nav>
     </div>
@@ -29,6 +30,10 @@
       <div><p class="eyebrow">Wallet access</p><h2 id="login-title">Sign in with MetaMask</h2><p>Connect your wallet, then sign a one-time login message. Connecting alone does not sign you in.</p><p class="muted">On a phone, open this page in the MetaMask in-app browser. No private key or blockchain transaction is needed.</p></div>
       <button id="login" type="button">Connect &amp; sign in</button>
     </section>
+    {% if request.path in ['/main', '/depositMoney', '/transferMoney'] %}
+    <p class="muted" id="snapshot-status">Blockchain views may reuse this session's snapshot. Refresh to check changes made by other wallets.</p>
+    {% if request.path != '/main' %}<button id="refresh" class="secondary" type="button">Refresh account &amp; activity</button>{% endif %}
+    {% endif %}
     <noscript><div class="notice">Enable JavaScript to sign in and load the dashboard. Blockchain actions remain unavailable.</div></noscript>
     {% block content %}{% endblock %}
   </main>

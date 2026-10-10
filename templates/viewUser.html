@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
-{% block title %}Classroom user log{% endblock %}
+{% block title %}User Log{% endblock %}
 {% block content %}
-<section class="card"><p class="eyebrow">Legacy classroom support</p><h1>User log</h1><p class="muted">Classroom names only. This log does not determine wallet roles or transaction history.</p><div class="legacy-log identifier">{{ r or 'No classroom names logged.' }}</div><form action="/deleteUser" method="POST"><button type="submit" class="secondary">Delete user log</button></form><a class="text-link" href="/main">← Back to dashboard</a></section>
+<section class="card"><h1>User Log</h1><p class="muted">Names and timestamps only. This log does not determine wallet roles or transaction history.</p>
+<div class="table-scroll"><table class="user-log-table"><thead><tr><th scope="col">Name</th><th scope="col">Timestamp</th></tr></thead><tbody>{% for row in rows %}<tr><td>{{ row['name'] }}</td><td>{{ row['timestamp'] }}</td></tr>{% else %}<tr><td colspan="2">No names logged.</td></tr>{% endfor %}</tbody></table></div>
+<form action="/deleteUser" method="POST"><button type="submit" class="secondary">Delete All User Logs</button></form><a class="text-link" href="/main">← Back to dashboard</a></section>
 {% endblock %}

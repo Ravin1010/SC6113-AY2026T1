@@ -465,3 +465,8 @@ dd {
 
 /* Live transaction hashes must wrap inside phone-width form cards. */
 .form-result { overflow-wrap:anywhere; min-width:0; }
+
+.table-scroll {overflow-x:auto; max-width:100%;}
+.user-log-table {width:100%; border-collapse:collapse; margin:1rem 0; text-align:left;}
+.user-log-table th, .user-log-table td {padding:.75rem; border-bottom:1px solid var(--border, #dce4ec); overflow-wrap:anywhere;}
+body[data-page="/"] #login-panel {display:none;}

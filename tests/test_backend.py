@@ -202,7 +202,7 @@ class BackendTests(unittest.TestCase):
         self.login()
         for path in ['/', '/main','/depositMoney','/transferMoney','/viewUser']:
             self.assertEqual(self.client.get(path).status_code, 200)
-        self.assertEqual(self.client.post('/main', data={'q':'new name'}).status_code, 200)
+        self.assertEqual(self.client.post('/main', data={'q':'new name'}).status_code, 303)
         self.assertIn('new name', self.client.get('/viewUser').get_data(as_text=True))
         self.assertEqual(self.client.post('/deleteUser').status_code, 200)
         with self.app.app_context():
@@ -308,8 +308,10 @@ class BackendTests(unittest.TestCase):
                 create_app({'APP_ENV':'production','SECRET_KEY':'test-only'})
             with self.assertRaisesRegex(RuntimeError,'HTTPS'):
                 create_app({'APP_ENV':'production','SECRET_KEY':'test-only','AUTH_ORIGIN':'http://test.example'})
-            prod = create_app({'APP_ENV':'production','SECRET_KEY':'test-only','AUTH_ORIGIN':'https://test.example','DATABASE':self.path})
-            result = prod.test_client().post('/api/auth/nonce',json={'wallet':self.account.address},base_url='https://test.example')
+            prod = create_app({'APP_ENV':'production','SECRET_KEY':'test-only','AUTH_ORIGIN':'https://test.example','DATABASE':self.path,'TURSO_DATABASE_URL':'libsql://test.turso.io','TURSO_AUTH_TOKEN':'test-only'})
+            from backend.turso import Connection
+            with patch('backend.turso.Connection', side_effect=lambda url, token: Connection(self.path, '')):
+                result = prod.test_client().post('/api/auth/nonce',json={'wallet':self.account.address},base_url='https://test.example')
             cookie = result.headers['Set-Cookie']
             for flag in ['Secure','HttpOnly','SameSite=Lax']:
                 self.assertIn(flag,cookie)

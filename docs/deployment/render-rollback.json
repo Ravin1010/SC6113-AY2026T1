@@ -1,0 +1,22 @@
+{
+  "recordedAt": "2026-10-10",
+  "serviceId": "srv-dal7read0e5s738rldh0",
+  "serviceName": "SC6113-AY2026T1",
+  "url": "https://sc6113-ay2026t1.onrender.com",
+  "repo": "https://github.com/Ravin1010/SC6113-AY2026T1",
+  "branch": "main",
+  "rootDir": "",
+  "buildCommand": "pip install -r requirements.txt",
+  "startCommand": "gunicorn app:app",
+  "runtime": "python",
+  "plan": "free",
+  "region": "singapore",
+  "instances": 1,
+  "autoDeploy": "yes",
+  "autoDeployTrigger": "commit",
+  "healthCheckPath": "",
+  "previousLiveDeploy": "dep-db335vg473hc7388jfb0",
+  "previousLiveCommit": "92707ce35aa22246d6cfd5592e85b52f33ddb7bc",
+  "environmentBackup": "Owner must privately preserve existing Environment values before changing them. No secrets are included here.",
+  "rollback": "Restore the previous Environment values and main branch, retain these build/start commands, then deploy the previous live commit. No data needs migration back; main uses its original database behavior."
+}

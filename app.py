@@ -4,7 +4,7 @@ import os
 import secrets
 from pathlib import Path
 from urllib.parse import urlsplit
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 from backend.api import api
 from backend.database import get_db, init_app
 
@@ -14,6 +14,8 @@ def create_app(test_config=None):
     production = os.getenv('APP_ENV', 'development') == 'production'
     app.config.from_mapping(
         APP_ENV='production' if production else 'development',
+        TURSO_DATABASE_URL=os.getenv('TURSO_DATABASE_URL', ''),
+        TURSO_AUTH_TOKEN=os.getenv('TURSO_AUTH_TOKEN', ''),
         DATABASE=os.getenv('DATABASE_PATH', str(Path(__file__).with_name('user.db'))),
         SECRET_KEY=os.getenv('FLASK_SECRET_KEY') or secrets.token_hex(32),
         AUTH_ORIGIN=os.getenv('AUTH_ORIGIN', 'http://localhost:5000'),
@@ -45,20 +47,36 @@ def create_app(test_config=None):
         raise RuntimeError('AUTH_ORIGIN must be a canonical HTTP(S) origin without a path')
     if app.config['APP_ENV'] == 'production' and origin.scheme != 'https':
         raise RuntimeError('Production AUTH_ORIGIN requires HTTPS')
+    if app.config['APP_ENV'] == 'production':
+        database_url = urlsplit(app.config['TURSO_DATABASE_URL'])
+        if (database_url.scheme not in ('libsql', 'https') or not database_url.hostname
+                or not database_url.hostname.endswith('.turso.io') or database_url.username
+                or database_url.password or database_url.query or database_url.fragment
+                or not app.config['TURSO_AUTH_TOKEN']):
+            raise RuntimeError('Production requires a remote Turso libSQL URL and authentication token')
     init_app(app)
     app.register_blueprint(api)
 
+    def save_name():
+        name = request.form.get('q', '').strip()
+        if not name or len(name) > 120:
+            return render_template('index.html', name_error='Enter a name of 1–120 characters.'), 400
+        db = get_db()
+        db.execute('INSERT INTO user (name,timestamp) VALUES(?,?)',
+                   (name, datetime.datetime.now(datetime.timezone.utc).isoformat()))
+        db.commit()
+        return redirect(url_for('main'), code=303)
+
     @app.route('/', methods=['GET', 'POST'])
     def index():
+        if request.method == 'POST':
+            return save_name()
         return render_template('index.html')
 
     @app.route('/main', methods=['GET', 'POST'])
     def main():
-        q = request.form.get('q')
-        if q and q.strip():
-            db = get_db()
-            db.execute('INSERT INTO user (name,timestamp) VALUES(?,?)', (q, datetime.datetime.now().isoformat(sep=" ")))
-            db.commit()
+        if request.method == 'POST':
+            return save_name()
         return render_template('main.html')
 
     @app.route('/transferMoney', endpoint='transferMoney', methods=['GET', 'POST'])
@@ -72,7 +90,7 @@ def create_app(test_config=None):
     @app.route('/viewUser', endpoint='viewUser', methods=['GET', 'POST'])
     def view_user():
         rows = get_db().execute('SELECT * FROM user').fetchall()
-        return render_template('viewUser.html', r=''.join(str(tuple(row)) for row in rows))
+        return render_template('viewUser.html', rows=rows)
 
     @app.route('/deleteUser', endpoint='deleteUser', methods=['POST'])
     def delete_user():

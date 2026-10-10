@@ -235,14 +235,13 @@ for (const width of [360,768,1280]) test(`responsive pages, controls, navigation
 });
 
 test('legacy classroom log remains usable', async () => {
-  const {page, context} = await pageWithWallet('absent'); await guest(page,'/');
-  await page.getByText('Classroom name log',{exact:true}).click();
+  const {page, context} = await pageWithWallet('absent'); await page.goto(origin+'/');
   await page.locator('#classroom-name').fill('UI test classroom user');
-  await page.getByText('Save name & open dashboard',{exact:true}).click();
+  await page.getByText('Save Name & Continue',{exact:true}).click();
   await page.goto(origin+'/viewUser');
-  assert.match(await page.locator('.legacy-log').textContent(),/UI test classroom user/);
-  await page.getByText('Delete user log',{exact:true}).click();
-  assert.equal(await page.locator('h1').textContent(),'User log deleted'); await context.close();
+  assert.match(await page.locator('.user-log-table').textContent(),/UI test classroom user/);
+  await page.getByText('Delete All User Logs',{exact:true}).click();
+  assert.equal(await page.locator('h1').textContent(),'User Log deleted'); await context.close();
 });
 
 test('no historical contract code, wallet transactions or browser exceptions', () => {
@@ -324,7 +323,7 @@ test('rejected blockchain signature is reported without fabricated success',asyn
 
 test('live browser checks produced no uncaught exceptions',()=>assert.deepEqual(browserErrors,[]));
 
-for(const action of ['claim','cancel'])test(`${action} refreshes terminal detail and balance without full reload`,async()=>{
+for(const action of ['claim','cancel'])test(`${action} refreshes terminal detail and balance with exactly one fresh shared snapshot`,async()=>{
   const {page,context}=await pageWithWallet('live-test');
   await verifiedRoutes(page,{claim:action==='claim',sender:false});
   let terminal=false,detailReads=0,balanceReads=0,identityReads=0;
@@ -343,7 +342,7 @@ for(const action of ['claim','cancel'])test(`${action} refreshes terminal detail
   const beforeIdentity=identityReads,beforeBalance=balanceReads;
   await button.click();
   await waitFor(async()=> (await page.locator('#remittance-detail').textContent()).includes(action==='claim'?'COMPLETED':'CANCELLED'));
-  assert.equal(detailReads,2);assert.equal(identityReads,beforeIdentity);assert.equal(balanceReads,beforeBalance+1);
+  assert.equal(detailReads,2);assert.equal(identityReads,beforeIdentity+1);assert.equal(balanceReads,beforeBalance+1);
   assert.ok(await page.locator('[data-blockchain-action="claim"]').isDisabled());
   assert.ok(await page.locator('[data-blockchain-action="cancel"]').isDisabled());
   await context.close();
@@ -380,11 +379,12 @@ test('admin eligibility deduplicates target role reads across actions and ordina
   await context.close();
 });
 
-for(const action of ['pause','authorizeSender'])test(`${action} refreshes affected authorization/pause state without balances or remittance list`,async()=>{
+for(const action of ['pause','authorizeSender'])test(`${action} invalidates cache and refreshes authorization/pause state once`,async()=>{
   const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page,{sender:false,targetRecipient:false});
   let applied=false,balanceReads=0,listReads=0;
   const deployment={deployment_verified:true,wired:true,paused:false,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20};
   await page.route('**/api/users/me',route=>route.fulfill({json:{wallet:account.address,roles:{available:true,source:'verified_contract',admin:true,sender:action==='authorizeSender'&&applied,recipient:false,paused:action==='pause'&&applied},deployment:{...deployment,paused:action==='pause'&&applied}}}));
+  await page.route('**/api/users/me/balances',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1000000000000000000',test_eth:'1'},reserved:{wei:'0',test_eth:'0'},deployment:{...deployment,paused:action==='pause'&&applied}}}));
   await page.route('**/api/users/roles/**',route=>route.fulfill({json:{available:true,source:'verified_contract',sender:applied,recipient:false}}));
   await page.route('**/api/transactions/*/receipt',route=>{applied=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:6}});});
   page.on('request',request=>{const path=new URL(request.url()).pathname;if(path==='/api/users/me/balances')balanceReads++;if(path==='/api/remittances')listReads++;});
@@ -392,6 +392,64 @@ for(const action of ['pause','authorizeSender'])test(`${action} refreshes affect
   const button=page.locator(`[data-blockchain-action="${action}"]`);await waitFor(()=>button.isEnabled());
   const before=[balanceReads,listReads];await button.click();
   await waitFor(async()=>action==='pause'?await page.locator('[data-blockchain-action="unpause"]').isEnabled():(await page.locator('#role-status').textContent()).includes('Sender'));
-  assert.deepEqual([balanceReads,listReads],before);
+  await waitFor(()=>listReads===before[1]+1);await page.waitForLoadState('networkidle');assert.deepEqual([balanceReads,listReads],[before[0]+1,before[1]+1]);
   assert.ok(await button.isDisabled());await context.close();
+});
+
+function countReads(page){
+  const counts={account:0,balance:0,list:0,history:0};
+  page.on('request',request=>{const path=new URL(request.url()).pathname;const key={'/api/users/me':'account','/api/users/me/balances':'balance','/api/remittances':'list','/api/transactions':'history'}[path];if(key)counts[key]++;});
+  return counts;
+}
+test('cross-route snapshot reuse and page-specific reads without a SPA',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);const counts=countReads(page);
+  await guest(page);await login(page);await page.waitForLoadState('networkidle');
+  assert.deepEqual(counts,{account:1,balance:1,list:1,history:1});
+  for(const route of ['/depositMoney','/transferMoney','/viewUser','/main']){
+    await page.goto(origin+route);await page.waitForLoadState('networkidle');
+    assert.deepEqual(counts,{account:1,balance:1,list:1,history:1},route+' reused snapshot');
+  }
+  const saved=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('sc6113-view-v1')));
+  assert.equal(saved.context.wallet,account.address.toLowerCase());assert.equal(saved.context.chain,'0xaa36a7');assert.equal(saved.context.deployment,'browser-fixture');
+  assert.doesNotMatch(JSON.stringify(saved),/csrf_token|auth_token|nonce|signature|private|credential/i);
+  await waitFor(async()=> (await page.locator('#role-status').textContent()).includes('Admin'));
+  await page.locator('#refresh').click();await waitFor(()=>counts.balance===2);await page.waitForLoadState('networkidle');
+  assert.deepEqual(counts,{account:2,balance:2,list:2,history:2});
+  await context.close();
+});
+test('funding first load omits unrelated activity and loads dashboard sections only once',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);const counts=countReads(page);
+  await guest(page,'/depositMoney');await login(page);await page.waitForLoadState('networkidle');
+  assert.deepEqual(counts,{account:1,balance:1,list:0,history:0});
+  await page.goto(origin+'/transferMoney');await page.waitForLoadState('networkidle');assert.deepEqual(counts,{account:1,balance:1,list:0,history:0});
+  await page.goto(origin+'/main');await page.waitForLoadState('networkidle');assert.deepEqual(counts,{account:1,balance:1,list:1,history:1});await context.close();
+});
+for(const status of ['rejected','failed'])test(`${status} transaction preserves snapshot without fresh blockchain load`,async()=>{
+  const {page,context}=await pageWithWallet(status==='rejected'?'reject-tx':'live-test');await verifiedRoutes(page);
+  if(status==='failed')await page.route('**/api/transactions/*/receipt',route=>route.fulfill({json:{status:'FAILED',canonical:true,confirmations:6}}));
+  const counts=countReads(page);await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
+  const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());const before={...counts};
+  const cacheBefore=await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1'));
+  await button.click();await waitFor(async()=>{const value=await page.locator('#deposit-result').textContent();return value.includes(status==='rejected'?'cancelled':'reverted');});
+  await page.waitForLoadState('networkidle');assert.deepEqual(counts,before);assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1')),cacheBefore);await context.close();
+});
+test('deployment ID change rejects the previous cached snapshot',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);const counts=countReads(page);
+  await guest(page,'/depositMoney');await login(page);await page.waitForLoadState('networkidle');
+  await page.evaluate(()=>{const saved=JSON.parse(sessionStorage.getItem('sc6113-view-v1'));saved.context.deployment='another-deployment';sessionStorage.setItem('sc6113-view-v1',JSON.stringify(saved));});
+  await page.goto(origin+'/depositMoney');await page.waitForLoadState('networkidle');assert.equal(counts.account,2);assert.equal(counts.balance,2);await context.close();
+});
+for(const field of ['session_started_at','session_view_epoch'])test(`server ${field} change invalidates cached state on focus; identical session does not`,async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);const counts=countReads(page);
+  await guest(page);await login(page);await page.waitForLoadState('networkidle');const before={...counts};
+  await page.evaluate(()=>{window.dispatchEvent(new Event('focus'));document.dispatchEvent(new Event('visibilitychange'));});await page.waitForLoadState('networkidle');assert.deepEqual(counts,before);
+  await page.route('**/api/auth/session',async route=>{const response=await route.fetch();const data=await response.json();data[field]=field==='session_started_at'?data[field]+1:data[field]+'-changed';await route.fulfill({json:data});});
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await waitFor(()=>counts.balance===before.balance+1);await page.waitForLoadState('networkidle');assert.equal(counts.account,before.account+1);await context.close();
+});
+test('logout/account change clears persisted snapshot; new login performs a fresh load',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);const counts=countReads(page);
+  await guest(page);await login(page);await page.waitForLoadState('networkidle');assert.ok(await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1')));
+  await page.locator('#logout').click();await waitFor(()=>page.locator('#login').isVisible());assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1')),null);
+  await login(page);await page.waitForLoadState('networkidle');assert.equal(counts.balance,2);
+  await page.evaluate(()=>window.__emitWallet('accountsChanged',['0x'+'d'.repeat(40)]));await waitFor(()=>page.locator('#login').isVisible());assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1')),null);await context.close();
 });
