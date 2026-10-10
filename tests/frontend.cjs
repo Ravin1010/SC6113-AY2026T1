@@ -519,3 +519,31 @@ test('unresolved submitted receipt survives route navigation and only verificati
   assert.deepEqual(await page.evaluate(()=>Object.keys(sessionStorage).filter(key=>key.startsWith('sc6113-pending:'))),[]);
   await context.close();
 });
+
+// Iteration 7: populated verified-state UI at each representative viewport.
+for(const width of [360,768,1280])test(`populated Activity and role-aware financial pages remain usable at ${width}px`,async()=>{
+  const {page,context}=await pageWithWallet('normal',width);
+  await verifiedRoutes(page,{admin:false,sender:true});
+  const txHash='0x'+'a'.repeat(64);
+  await page.route('**/api/transactions?*',route=>route.fulfill({json:{source:'sqlite_index',authoritative:false,
+    live_blockchain_checked:true,indexing_available:true,indexing:{caught_up:false},items:[{
+      tx_hash:txHash,sender_wallet:account.address,recipient_wallet:'0x'+'b'.repeat(40),block_number:20,
+      receipt_status:1,deployment_id:'browser-fixture',chain_id:11155111,
+      events:[{event_type:'RemittanceCreated',log_index:0,remittance_id:'1'}]
+    }]}}));
+  await guest(page);await login(page);
+  for(const path of ['/main','/depositMoney','/transferMoney']){
+    await page.goto(origin+path);await page.waitForLoadState('networkidle');
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`${path}: overflow`);
+    if(path==='/main'){
+      assert.ok((await page.locator('#history-records').textContent()).includes(txHash));
+      assert.match(await page.locator('#history-provenance').textContent(),/Not authoritative.*Historical catch-up incomplete/);
+      assert.equal(await page.locator('[data-blockchain-action="authorizeSender"]').isDisabled(),true);
+    }
+    if(path==='/depositMoney'){
+      await page.locator('#deposit-amount').fill('0.001');
+      await waitFor(()=>page.locator('[data-blockchain-action="deposit"]').isEnabled());
+    }
+  }
+  assert.ok(await page.evaluate(()=>!window.__sendCount));await context.close();
+});

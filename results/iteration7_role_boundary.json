@@ -19,7 +19,10 @@
   },
   "immutable_admin_unchanged": true,
   "revoke_admin_enum_rejected": true,
-  "iteration7_admin_self_assignment_criterion": "FAIL",
+  "original_self_assignment_prohibition": "FAIL",
+  "reviewed_criterion": "Only immutable Admin grants/revokes ordinary roles; ordinary roles do not confer Admin authority",
+  "iteration7_corrected_role_criterion": "PASS",
+  "status": "Accepted limitation (owner-approved Option A)",
   "finding": "I7-01",
   "severity": "Low",
   "note": "Policy/acceptance mismatch, not an unprivileged escalation or evidence of financial loss."

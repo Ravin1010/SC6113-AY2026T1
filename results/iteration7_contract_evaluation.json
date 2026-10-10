@@ -1,0 +1,404 @@
+{
+  "baseline": "8c99477be903ed3885249ad91be17b103f5ab4bc",
+  "compiler": "0.8.34+commit.80d5c536.Emscripten.clang",
+  "ganache": "7.9.2",
+  "node": "v24.19.0",
+  "evm": "shanghai",
+  "optimizer_runs": 200,
+  "chain_id": 31337,
+  "seed": 6113,
+  "model_transitions": 48,
+  "assertions": 952,
+  "expected_rejections": 61,
+  "scenario_checks": 71,
+  "external_rpc": false,
+  "sepolia_writes": 0,
+  "cases": [
+    {
+      "name": "authorizeSender: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "authorizeRecipient: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "non-Admin cannot authorize Sender",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot authorize Recipient",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot revoke",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot pause",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot unpause",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot authorize Sender",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot authorize Recipient",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot revoke",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot pause",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot unpause",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot authorize Sender",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot authorize Recipient",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot revoke",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot pause",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "non-Admin cannot unpause",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "zero Sender wallet",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "zero Recipient wallet",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "duplicate Sender",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "duplicate Recipient",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "Admin enum not an ordinary role",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "revokeRole: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "revoke missing role",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "zero revoke target",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "wiring non-Admin",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "wiring permanently locked",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "untrusted reservation operation",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "untrusted reservation operation",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "untrusted reservation operation",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "deposit: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "zero deposit",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "unauthorized deposit",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "plain ETH is not a deposit",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "zero withdrawal",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "withdraw above available",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "other wallet has no withdraw credit",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "withdraw: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "unauthorized create",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "zero recipient",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "self remittance",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "recipient permission required",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "zero create",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "create exceeds available",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "transfer: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "reserved funds cannot be withdrawn",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "pause: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "full pause blocks financial action",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "full pause blocks financial action",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "full pause blocks financial action",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "full pause blocks financial action",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "full pause blocks financial action",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "already paused",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "unpause: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "already unpaused",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "wrong claimant",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "unrelated claimant",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "claim: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "double claim",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "cancel completed",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "other authorized Sender cannot cancel",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "Recipient cannot cancel",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "revoked Sender cannot deposit",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "revoked Sender cannot create",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "cancel: success and event sequence",
+      "outcome": "PASS"
+    },
+    {
+      "name": "double cancel",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "claim cancelled",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "unknown claim",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "unknown cancel",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "unknown claim",
+      "outcome": "REJECTED_AS_EXPECTED"
+    },
+    {
+      "name": "unknown cancel",
+      "outcome": "REJECTED_AS_EXPECTED"
+    }
+  ],
+  "gas": [
+    {
+      "action": "authorizeSender",
+      "contract": "RoleRegistry",
+      "scenario": "First grant to ordinary Sender",
+      "gas_used": 46207,
+      "eth_value_transfer": false,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0x4af323e46c454064790fda35af4f24cde66b2fc0d9653db3b99bc91c09503779"
+    },
+    {
+      "action": "authorizeRecipient",
+      "contract": "RoleRegistry",
+      "scenario": "First grant to ordinary Recipient",
+      "gas_used": 46217,
+      "eth_value_transfer": false,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0x819d6f722618fd9a584af698e61359f06f4e3e3c0192a1b50acdefdacda68bd8"
+    },
+    {
+      "action": "revokeRole",
+      "contract": "RoleRegistry",
+      "scenario": "Revoke Sender wallet Recipient permission; Sender remains",
+      "gas_used": 24514,
+      "eth_value_transfer": false,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0xa0f0d8abe32dcdaaa84e3de4b6ebcb1099ac44645380b383eda15de2c9e58120"
+    },
+    {
+      "action": "pause",
+      "contract": "RoleRegistry",
+      "scenario": "False to true",
+      "gas_used": 44637,
+      "eth_value_transfer": false,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0x03a016a853881373a8558589ae10a93ca418e890d35e2030aa2a20f03e2fc1fe"
+    },
+    {
+      "action": "unpause",
+      "contract": "RoleRegistry",
+      "scenario": "True to false",
+      "gas_used": 22751,
+      "eth_value_transfer": false,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0x7cb333f9af71bc6617b0b765a41e0d9ae496f4a75b63361e369a74c5f75965c8"
+    },
+    {
+      "action": "deposit",
+      "contract": "deposit_money",
+      "scenario": "First deposit, 0.005 ETH, zero prior balance",
+      "gas_used": 78301,
+      "eth_value_transfer": true,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0x190a8d3ee38fb67e6931b380d371bd7951c3e9894acb9d74efb454ce87a64c0c"
+    },
+    {
+      "action": "withdraw",
+      "contract": "deposit_money",
+      "scenario": "Partial withdrawal 0.001 ETH; remaining availability",
+      "gas_used": 54459,
+      "eth_value_transfer": true,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0x647a46f8394ad41e9ca7f9460019e54a4498d1a46922102b104bf912edde304f"
+    },
+    {
+      "action": "transfer",
+      "contract": "paynow",
+      "scenario": "First remittance ID, 0.001 ETH, new reservation storage",
+      "gas_used": 285988,
+      "eth_value_transfer": false,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0xc31a7ac416c0191d14384da827f9451860b5b87b16280e412f5940db5cbbb5a8"
+    },
+    {
+      "action": "claim",
+      "contract": "paynow",
+      "scenario": "Claim 0.001 ETH after Recipient revocation",
+      "gas_used": 114416,
+      "eth_value_transfer": true,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0x0ddfa71eab29ba39b3e282c5d90f8f705eb1992b44091c3b81d5a157fb2a23e8"
+    },
+    {
+      "action": "cancel",
+      "contract": "paynow",
+      "scenario": "Cancel pending 0.001 ETH after Sender revocation; available nonzero",
+      "gas_used": 115218,
+      "eth_value_transfer": false,
+      "source": "deterministic_local_chain",
+      "chain_id": 31337,
+      "transaction_hash": "0xf919703b40eab786af41edf8bf611b03814d109e7f77a2c6bd782faf389d477e"
+    }
+  ]
+}

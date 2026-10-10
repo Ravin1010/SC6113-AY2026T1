@@ -43,12 +43,15 @@ const { compile } = require('./compile-contracts.cjs');
       admin_self_authorize_sender: { receipt_status: senderReceipt.status, permission: true },
       admin_self_authorize_recipient: { receipt_status: recipientReceipt.status, permission: true },
       immutable_admin_unchanged: true, revoke_admin_enum_rejected: adminRevocationRejected,
-      iteration7_admin_self_assignment_criterion: 'FAIL',
+      original_self_assignment_prohibition: 'FAIL',
+      reviewed_criterion: 'Only immutable Admin grants/revokes ordinary roles; ordinary roles do not confer Admin authority',
+      iteration7_corrected_role_criterion: 'PASS',
+      status: 'Accepted limitation (owner-approved Option A)',
       finding: 'I7-01', severity: 'Low',
       note: 'Policy/acceptance mismatch, not an unprivileged escalation or evidence of financial loss.'
     };
     fs.writeFileSync('results/iteration7_role_boundary.json', JSON.stringify(result, null, 2) + '\n');
-    console.log('8 characterization assertions PASS; Iteration 7 Admin self-assignment criterion FAIL.');
-    console.log('No Sepolia writes. Frozen source unchanged. Review required before contract changes.');
+    console.log('8 characterization assertions PASS; corrected role criterion PASS; I7-01 accepted Low limitation.');
+    console.log('No Sepolia writes. Frozen source unchanged. No contract change required under reviewed Option A.');
   } finally { await rpc.disconnect(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

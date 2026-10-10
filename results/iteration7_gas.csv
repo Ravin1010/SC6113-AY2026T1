@@ -1,0 +1,11 @@
+action,contract,scenario,gas_used,eth_value_transfer,source,chain_id,transaction_hash
+"authorizeSender","RoleRegistry","First grant to ordinary Sender","46207","false","deterministic_local_chain","31337","0x4af323e46c454064790fda35af4f24cde66b2fc0d9653db3b99bc91c09503779"
+"authorizeRecipient","RoleRegistry","First grant to ordinary Recipient","46217","false","deterministic_local_chain","31337","0x819d6f722618fd9a584af698e61359f06f4e3e3c0192a1b50acdefdacda68bd8"
+"revokeRole","RoleRegistry","Revoke Sender wallet Recipient permission; Sender remains","24514","false","deterministic_local_chain","31337","0xa0f0d8abe32dcdaaa84e3de4b6ebcb1099ac44645380b383eda15de2c9e58120"
+"pause","RoleRegistry","False to true","44637","false","deterministic_local_chain","31337","0x03a016a853881373a8558589ae10a93ca418e890d35e2030aa2a20f03e2fc1fe"
+"unpause","RoleRegistry","True to false","22751","false","deterministic_local_chain","31337","0x7cb333f9af71bc6617b0b765a41e0d9ae496f4a75b63361e369a74c5f75965c8"
+"deposit","deposit_money","First deposit, 0.005 ETH, zero prior balance","78301","true","deterministic_local_chain","31337","0x190a8d3ee38fb67e6931b380d371bd7951c3e9894acb9d74efb454ce87a64c0c"
+"withdraw","deposit_money","Partial withdrawal 0.001 ETH; remaining availability","54459","true","deterministic_local_chain","31337","0x647a46f8394ad41e9ca7f9460019e54a4498d1a46922102b104bf912edde304f"
+"transfer","paynow","First remittance ID, 0.001 ETH, new reservation storage","285988","false","deterministic_local_chain","31337","0xc31a7ac416c0191d14384da827f9451860b5b87b16280e412f5940db5cbbb5a8"
+"claim","paynow","Claim 0.001 ETH after Recipient revocation","114416","true","deterministic_local_chain","31337","0x0ddfa71eab29ba39b3e282c5d90f8f705eb1992b44091c3b81d5a157fb2a23e8"
+"cancel","paynow","Cancel pending 0.001 ETH after Sender revocation; available nonzero","115218","false","deterministic_local_chain","31337","0xf919703b40eab786af41edf8bf611b03814d109e7f77a2c6bd782faf389d477e"
