@@ -225,7 +225,7 @@ class BlockchainTests(unittest.TestCase):
         log=self.event();log['blockHash']=HASH(777)
         with self.assertRaises(BlockchainError):index_events(self.reader)
         self.assertEqual(get_db().execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0],0)
-        self.assertEqual(get_db().execute('SELECT COUNT(*) FROM indexing_state').fetchone()[0],0)
+        self.assertEqual(get_db().execute("SELECT COUNT(*) FROM indexing_state WHERE contract_address=?",(ADDRESSES['paynow'].lower(),)).fetchone()[0],0)
 
     def test_unconfirmed_log_not_indexed(self):
         self.event(block=19);index_events(self.reader)

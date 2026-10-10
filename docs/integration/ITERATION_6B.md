@@ -129,8 +129,9 @@ records are copied to runtime `user.db` or production.
 
 ## Hosted evidence — pending required checkpoints
 
-No Turso account/database has been created or token requested in chat.
-No Render settings have been changed; no 6B deployment has happened yet.
+At the original source checkpoint, Turso and Render setup were still pending.
+Subsequent owner-reported hosted checks are recorded in the correction section below;
+no credentials have been requested in chat.
 Local regressions are recorded at the checkpoint, not claimed as hosted proof.
 
 Still required, in order:
@@ -178,3 +179,53 @@ No new hosted lifecycle transaction or phone result is invented here.
 These are pre-hosting checkpoint results. Hosted persistence/restart, hosted
 MetaMask lifecycle and physical-device evidence are still required before the
 final 6B commit/verdict. No final approval is implied by this checkpoint.
+
+## Hosted index catch-up correction
+
+Base checkpoint: `449d708d03b75bf2717eb7d4ac8053473df8235c`; same 6B branch.
+Owner reports successful hosted Turso User Log insert/view, persistence across
+Render redeploy, Delete All User Logs, and MetaMask Admin authentication. These
+are owner-reported results, not new wallet transactions performed by Work.
+The initial clean production index then timed out in synchronous receipt reads
+on `/api/remittances`, producing HTTP 500 and a Gunicorn worker timeout.
+
+The correction keeps the confirmed-log index and direct contract reads, with:
+- A six-second indexing budget (hard configuration cap eight seconds), checked
+  before and after RPC calls, and chunks capped at 25 blocks.
+- A dedicated indexing-only HTTP provider: no retries/backoff, connect timeout
+  at most 0.5 seconds and read timeout at most one second, reduced to fit the
+  remaining budget. The authoritative reader transport is unchanged.
+- Pass-local receipt/transaction caches: each unique transaction is fetched at
+  most once. Ordinary block lookups are shared by height. Deliberate fresh
+  end-of-chunk and verification-snapshot reads remain as reorg fences.
+- Atomic writes of validated chunk events/transactions and their checkpoint;
+  completed chunks survive budget exhaustion. Incomplete chunks never advance
+  progress. A later request continues at checkpoint + 1.
+- Normal budget exhaustion returns `caught_up: false`. RPC failures/timeouts
+  return sanitized `BLOCKCHAIN_READER_UNAVAILABLE` / HTTP 503. If existing
+  checkpoints could not be verified within the budget, return 503 rather than
+  expose unchecked indexed evidence. Orphaned cache is still purged and replayed.
+- Partial discovery is explicitly flagged. Financial remittance records still
+  come from authoritative contract reads; no index completeness is assumed.
+
+No Gunicorn timeout increase, background worker, queue, schema change, new
+credentials, Solidity/deployment changes, or frontend production changes.
+Cross-page caching and explicit Refresh behavior remain intact. Existing safe
+chunks may remain committed when a subsequent chunk fails validation; the next
+pass verifies all checkpoints and purges/replays on reorg. The adjusted rollback
+test asserts that the inconsistent contract chunk has no checkpoint/events,
+while earlier independently validated chunks retain safe progress.
+
+Focused regressions cover clean index, partial progress/continuation, eventual
+completion/idempotence, duplicate logs sharing RPC calls, slow receipts, normal
+partial HTTP 200, structured 503, direct reads independent of catch-up, and a
+real delayed HTTP receipt response that returns 503 in under one second with
+exactly one receipt request. A browser test wait was stabilized for an already
+pending session-only focus check; it still asserts exactly one state reload.
+
+Correction regression results: **104 Python tests**, **48 browser tests**,
+local-chain integration with sqlite3 and libsql (**8 assertions and 12 canonical
+events per driver**, repeat indexing unchanged), and `git diff --check`.
+Hosted lifecycle transactions remain paused; no MetaMask transaction, schema
+change, secret change, smart-contract redeployment, main merge, or Iteration 7.
+This remains a checkpoint correction, not final Iteration 6B approval.

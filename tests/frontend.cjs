@@ -444,7 +444,9 @@ for(const field of ['session_started_at','session_view_epoch'])test(`server ${fi
   await guest(page);await login(page);await page.waitForLoadState('networkidle');const before={...counts};
   await page.evaluate(()=>{window.dispatchEvent(new Event('focus'));document.dispatchEvent(new Event('visibilitychange'));});await page.waitForLoadState('networkidle');assert.deepEqual(counts,before);
   await page.route('**/api/auth/session',async route=>{const response=await route.fetch();const data=await response.json();data[field]=field==='session_started_at'?data[field]+1:data[field]+'-changed';await route.fulfill({json:data});});
-  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await waitFor(()=>counts.balance===before.balance+1);await page.waitForLoadState('networkidle');assert.equal(counts.account,before.account+1);await context.close();
+  // A focus can intentionally join an already pending session check. Wait until
+  // the changed response is observed, while still asserting exactly one reload.
+  await waitFor(async()=>{assert.ok(counts.balance<=before.balance+1);if(counts.balance===before.balance+1)return true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));return false;});await page.waitForLoadState('networkidle');assert.equal(counts.account,before.account+1);await context.close();
 });
 test('logout/account change clears persisted snapshot; new login performs a fresh load',async()=>{
   const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);const counts=countReads(page);
