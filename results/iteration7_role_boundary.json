@@ -1,0 +1,26 @@
+{
+  "baseline": "8c99477be903ed3885249ad91be17b103f5ab4bc",
+  "source": "deterministic_local_chain",
+  "chain_id": 31337,
+  "compiler": "0.8.34+commit.80d5c536.Emscripten.clang",
+  "evm": "shanghai",
+  "optimizer_runs": 200,
+  "external_rpc_used": false,
+  "sepolia_writes": 0,
+  "characterization_assertions": 8,
+  "unauthorized_authorization_rejected": true,
+  "admin_self_authorize_sender": {
+    "receipt_status": 1,
+    "permission": true
+  },
+  "admin_self_authorize_recipient": {
+    "receipt_status": 1,
+    "permission": true
+  },
+  "immutable_admin_unchanged": true,
+  "revoke_admin_enum_rejected": true,
+  "iteration7_admin_self_assignment_criterion": "FAIL",
+  "finding": "I7-01",
+  "severity": "Low",
+  "note": "Policy/acceptance mismatch, not an unprivileged escalation or evidence of financial loss."
+}
