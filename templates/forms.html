@@ -10,11 +10,11 @@
 {% macro result(id) %}<p id="{{ id }}" class="form-result muted" role="status" aria-live="polite">Check the inputs without submitting a transaction.</p>{% endmacro %}
 {% macro funding() %}
 <div class="grid two">
-  <section class="card"><h2>Deposit test ETH</h2><p>Future deposits credit the signing Sender's available balance.</p><form data-preview novalidate aria-describedby="deposit-result">
-    {{ amount('deposit-amount') }}<div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action>Deposit</button></div>{{ result('deposit-result') }}
+  <section class="card"><h2>Deposit test ETH</h2><p>Deposits credit the signing Sender's available balance.</p><form data-preview novalidate aria-describedby="deposit-result">
+    {{ amount('deposit-amount') }}<div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action="deposit">Deposit</button></div>{{ result('deposit-result') }}
   </form></section>
   <section class="card"><h2>Withdraw available funds</h2><p>Only your available, unlocked funds can be withdrawn to your wallet.</p><form data-preview novalidate aria-describedby="withdraw-result">
-    {{ amount('withdraw-amount') }}<div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action>Withdraw</button></div>{{ result('withdraw-result') }}
+    {{ amount('withdraw-amount') }}<div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action="withdraw">Withdraw</button></div>{{ result('withdraw-result') }}
   </form></section>
 </div>
 {% endmacro %}
@@ -22,19 +22,19 @@
 <div class="grid two">
   <section class="card"><h2>Create remittance</h2><p>Reserve available funds for one designated recipient.</p><form data-preview novalidate aria-describedby="create-result">
     {{ address('recipient-wallet', 'Recipient wallet', true) }}{{ amount('remittance-amount') }}
-    <div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action>Create remittance</button></div>{{ result('create-result') }}
+    <div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action="transfer">Create remittance</button></div>{{ result('create-result') }}
   </form></section>
   <section class="card"><h2>Claim or cancel</h2><p>The designated recipient may claim a pending remittance. Its original sender may cancel while pending.</p><form data-preview novalidate aria-describedby="manage-result">
-    {{ remittance_id('remittance-id') }}<div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action>Claim</button><button type="button" disabled data-blockchain-action>Cancel</button></div>{{ result('manage-result') }}
-  </form><p class="muted">Live remittance status is unavailable. No remittance has been created by this form.</p></section>
+    {{ remittance_id('remittance-id') }}<div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action="claim">Claim</button><button type="button" disabled data-blockchain-action="cancel">Cancel</button></div>{{ result('manage-result') }}
+  </form><p id="remittance-detail" class="identifier muted" role="status">Enter an ID to check verified live status when available.</p></section>
 </div>
 {% endmacro %}
 {% macro admin() %}
 <section class="card" id="admin" aria-labelledby="admin-title"><p class="eyebrow">Admin / Auditor</p><h2 id="admin-title">Authorization &amp; audit</h2><p>Verified on-chain Admin access is required. A wallet login does not grant Admin privileges.</p>
   <form data-preview novalidate aria-describedby="admin-result">{{ address('admin-wallet') }}
     <label for="ordinary-role">Ordinary role to revoke</label><select id="ordinary-role"><option value="sender">Sender</option><option value="recipient">Recipient</option></select>
-    <div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action>Authorize Sender</button><button type="button" disabled data-blockchain-action>Authorize Recipient</button><button type="button" disabled data-blockchain-action>Revoke role</button></div>{{ result('admin-result') }}
-  </form><div class="actions"><button type="button" disabled data-blockchain-action>Pause system</button><button type="button" disabled data-blockchain-action>Unpause system</button></div>
-  <p class="muted">Admin transactions and live audit access are unavailable until verified Sepolia integration.</p>
+    <div class="actions"><button type="submit" class="secondary">Check inputs</button><button type="button" disabled data-blockchain-action="authorizeSender">Authorize Sender</button><button type="button" disabled data-blockchain-action="authorizeRecipient">Authorize Recipient</button><button type="button" disabled data-blockchain-action="revokeRole">Revoke role</button></div>{{ result('admin-result') }}
+  </form><div class="actions"><button type="button" disabled data-blockchain-action="pause">Pause system</button><button type="button" disabled data-blockchain-action="unpause">Unpause system</button></div>
+  <button id="audit-refresh" class="secondary" type="button" disabled>Read verified Admin audit index</button><div id="audit-records" class="identifier" role="status"></div><p class="muted">Controls require a verified, permanently wired deployment and the immutable on-chain Admin.</p>
 </section>
 {% endmacro %}

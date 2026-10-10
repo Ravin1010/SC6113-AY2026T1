@@ -1,0 +1,61 @@
+{
+  "chainId": 11155111,
+  "deploymentId": "sc6113-sepolia-11884239",
+  "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+  "contracts": {
+    "RoleRegistry": {
+      "address": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+      "transactionHash": "0x569254964b6cb061f0f8582651886c808f67fcaa9fe3f971985f30a6c14ea062",
+      "blockNumber": 11884239,
+      "explorerUrl": "https://sepolia.etherscan.io/address/0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678"
+    },
+    "deposit_money": {
+      "address": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+      "transactionHash": "0x0a821bab3526a05d40b85ad7d88d0ba39b8524db61fa4eb793af8fc8c8b0a944",
+      "blockNumber": 11884271,
+      "explorerUrl": "https://sepolia.etherscan.io/address/0x630863E58375Db128EFEfA51Ee369141cCbb839A"
+    },
+    "paynow": {
+      "address": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8",
+      "transactionHash": "0x4b6954a4e05fb70e9313e414d8044545ba5a14d6311e35daaaaf427313d67544",
+      "blockNumber": 11884290,
+      "explorerUrl": "https://sepolia.etherscan.io/address/0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+    }
+  },
+  "wiring": {
+    "transactionHash": "0xa2b051bc68857ee471c8bf22d127907e903d69e79b70c40ec3426201b98a54c4",
+    "blockNumber": 11884306
+  },
+  "evidenceStatus": "INDEPENDENTLY_VERIFIED_POST_WIRING",
+  "sourceVerification": {
+    "RoleRegistry": {
+      "independentlyChecked": true,
+      "sourcifyCreationMatch": "exact_match",
+      "sourcifyRuntimeMatch": "exact_match",
+      "blockscoutVerified": true,
+      "verifiedAt": "2026-10-10T11:29:25Z",
+      "sourcifyUrl": "https://sourcify.dev/server/v2/contract/11155111/0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+      "blockscoutUrl": "https://eth-sepolia.blockscout.com/address/0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678?tab=contract"
+    },
+    "deposit_money": {
+      "independentlyChecked": true,
+      "sourcifyCreationMatch": "exact_match",
+      "sourcifyRuntimeMatch": "exact_match",
+      "blockscoutVerified": true,
+      "verifiedAt": "2026-10-10T11:36:06Z",
+      "sourcifyUrl": "https://sourcify.dev/server/v2/contract/11155111/0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+      "blockscoutUrl": "https://eth-sepolia.blockscout.com/address/0x630863E58375Db128EFEfA51Ee369141cCbb839A?tab=contract"
+    },
+    "paynow": {
+      "independentlyChecked": true,
+      "sourcifyCreationMatch": "exact_match",
+      "sourcifyRuntimeMatch": "exact_match",
+      "blockscoutVerified": true,
+      "verifiedAt": "2026-10-10T11:39:50Z",
+      "sourcifyUrl": "https://sourcify.dev/server/v2/contract/11155111/0xA2Ee37DD717a8758Eb864788456d047b296C00E8",
+      "blockscoutUrl": "https://eth-sepolia.blockscout.com/address/0xA2Ee37DD717a8758Eb864788456d047b296C00E8?tab=contract"
+    }
+  },
+  "compilerSourcePrefix": "contracts/",
+  "verifiedAtBlock": 11884361
+}

@@ -243,7 +243,7 @@ class BackendTests(unittest.TestCase):
         self.configured()
         self.assert_error(self.client.get('/api/remittances'),503,'BLOCKCHAIN_DEPLOYMENT_UNVERIFIED')
         self.app.config['BLOCKCHAIN_DEPLOYMENT_VERIFIED'] = True
-        self.assert_error(self.client.get('/api/remittances'),503,'BLOCKCHAIN_READER_UNAVAILABLE')
+        self.assert_error(self.client.get('/api/remittances'),503,'BLOCKCHAIN_DEPLOYMENT_UNVERIFIED')
 
     def test_historical_addresses_invalid_and_no_network_fallback(self):
         self.login()

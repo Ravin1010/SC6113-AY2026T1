@@ -2,6 +2,6 @@
 {% block title %}Funding{% endblock %}
 {% block content %}
 <div class="page-heading"><p class="eyebrow">Funding</p><h1>Deposit &amp; withdraw</h1><p>Prepare your inputs. Financial actions will be signed by your wallet after deployment.</p></div>
-<section class="notice"><p data-deployment-status>Blockchain deployment not configured yet.</p><p>Available and reserved balances are unavailable. Deposit and withdrawal submissions are disabled.</p></section>
+<section class="notice"><p data-deployment-status>Blockchain deployment not configured yet.</p><dl><dt>Available</dt><dd id="available-balance" class="identifier">Unavailable</dd><dt>Reserved</dt><dd id="reserved-balance" class="identifier">Unavailable</dd></dl><p>Actions require a verified deployment, matching authenticated wallet and Sepolia.</p></section>
 {{ forms.funding() }}<a class="text-link" href="/main">← Back to dashboard</a>
 {% endblock %}

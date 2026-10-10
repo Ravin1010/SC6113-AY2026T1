@@ -1,0 +1,644 @@
+{
+  "captured_at_utc": "2026-10-10T15:36:13.783384+00:00",
+  "blockchain_writes": 0,
+  "provenance": "Existing user-signed smoke transactions recovered through verified-contract logs and canonical receipts; no new transactions.",
+  "ui_evidence": "User reported completed manual live smoke testing and accepted the correction package. This script independently verifies on-chain evidence, not browser interactions.",
+  "deployment": {
+    "configured": true,
+    "deployment_verified": true,
+    "reader_available": true,
+    "wired": true,
+    "paused": false,
+    "chain_id": 11155111,
+    "deployment_id": "sc6113-sepolia-11884239",
+    "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+    "addresses": {
+      "RoleRegistry": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+      "deposit_money": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+      "paynow": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+    },
+    "block_number": 11885470,
+    "block_hash": "0x2b743771bfd9f194325995576257b54ec473b70e786571667072140a2040f583",
+    "remittance_count": "2"
+  },
+  "transactions": [
+    {
+      "transaction_hash": "0xa2b051bc68857ee471c8bf22d127907e903d69e79b70c40ec3426201b98a54c4",
+      "status": "CONFIRMED",
+      "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11884306,
+      "block_hash": "0x294c450e858d0d680b0c9985c6d50ed8666cdf4ed82a7a80d9e8967f9f21fdbf",
+      "confirmations": 1165,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "deposit_money",
+          "event": "RemittanceContractConfigured",
+          "args": {
+            "remittanceContract": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8",
+            "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+          },
+          "log_index": 388
+        }
+      ],
+      "actions": [],
+      "timestamp": 1791632568,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0x435c01292070c2c4973fb6f04d38fd592e0a89c8ba532a418f90d8f67efee599",
+      "status": "CONFIRMED",
+      "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11884606,
+      "block_hash": "0x67b7e672fae378c4418ccbb9cade8fa5666e292aec78ff000774006ffc4a9038",
+      "confirmations": 865,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "RoleRegistry",
+          "event": "RoleAuthorized",
+          "args": {
+            "wallet": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "role": 0,
+            "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+          },
+          "log_index": 13
+        }
+      ],
+      "actions": [
+        "authorizeSender"
+      ],
+      "timestamp": 1791636168,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xe8d18bc3971b16c1d98dc31a9ae7ba8a58eec1868e2fd36222c57d801caee1f6",
+      "status": "CONFIRMED",
+      "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11884646,
+      "block_hash": "0x4a9e2b5fb97aa9fc69c03ed1b769fe9bd544c287bba1a7cae4925ef82eccae7e",
+      "confirmations": 825,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "RoleRegistry",
+          "event": "RoleAuthorized",
+          "args": {
+            "wallet": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "role": 0,
+            "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+          },
+          "log_index": 10
+        }
+      ],
+      "actions": [
+        "authorizeSender"
+      ],
+      "timestamp": 1791636648,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xe90e29d163dda3503e1cdefdf3331e2f49d074e5e68756f489519ea2c4821564",
+      "status": "CONFIRMED",
+      "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11884670,
+      "block_hash": "0x9d71b2a16ec4d5829855289c5733d169b77ae6e9aac71538e9888333a2d86e5f",
+      "confirmations": 801,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "RoleRegistry",
+          "event": "RoleAuthorized",
+          "args": {
+            "wallet": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "role": 1,
+            "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+          },
+          "log_index": 5
+        }
+      ],
+      "actions": [
+        "authorizeRecipient"
+      ],
+      "timestamp": 1791636936,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xc7e5eafd2f395a59805f992f7a55dc3c2231d79193cd2f0e16b9e48d0f6c2858",
+      "status": "CONFIRMED",
+      "from": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+      "to": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+      "block_number": 11884741,
+      "block_hash": "0x087300be4ceeae76e47c061ab9d019be693d889065431f4cc5ecba42240573a5",
+      "confirmations": 730,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "deposit_money",
+          "event": "FundsDeposited",
+          "args": {
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "amount": 1000000000000000
+          },
+          "log_index": 17
+        }
+      ],
+      "actions": [
+        "deposit"
+      ],
+      "timestamp": 1791637788,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0x3ae3b35001cdf73c9a3540a9af0087300afb23600901eaa93f148c716b652ff6",
+      "status": "CONFIRMED",
+      "from": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11884851,
+      "block_hash": "0x4126eccd74f530a1184315bf1ad84980963d0f19e476ee175aa084f7ea731c49",
+      "confirmations": 620,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "deposit_money",
+          "event": "FundsReserved",
+          "args": {
+            "remittanceId": 1,
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "amount": 1000000000000000
+          },
+          "log_index": 8
+        },
+        {
+          "contract": "paynow",
+          "event": "RemittanceCreated",
+          "args": {
+            "remittanceId": 1,
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "amount": 1000000000000000,
+            "status": 0
+          },
+          "log_index": 9
+        }
+      ],
+      "actions": [
+        "transfer"
+      ],
+      "timestamp": 1791639108,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xbca164391f46a2955e91465f1663964245743d6572425ab520d80c992aaa13e5",
+      "status": "CONFIRMED",
+      "from": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11884976,
+      "block_hash": "0x8457587c54a4b53b6c1a78188366f6496d67d403a94f8f831cd543c913facd80",
+      "confirmations": 495,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "deposit_money",
+          "event": "ReservedFundsReleased",
+          "args": {
+            "remittanceId": 1,
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "amount": 1000000000000000
+          },
+          "log_index": 266
+        },
+        {
+          "contract": "paynow",
+          "event": "RemittanceClaimed",
+          "args": {
+            "remittanceId": 1,
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "amount": 1000000000000000,
+            "status": 1
+          },
+          "log_index": 267
+        }
+      ],
+      "actions": [
+        "claim"
+      ],
+      "timestamp": 1791640608,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xa7dffefd79d3ea3af0361583e7da7eae4120dfd56fb2c78316d5c6c6d6ea690f",
+      "status": "CONFIRMED",
+      "from": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+      "to": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+      "block_number": 11885039,
+      "block_hash": "0x7ea1602af0d52a981f1159cbc339b27ac58593f0d9c7144f0a02dcf8441f4ed0",
+      "confirmations": 432,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "deposit_money",
+          "event": "FundsDeposited",
+          "args": {
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "amount": 2000000000000000
+          },
+          "log_index": 21
+        }
+      ],
+      "actions": [
+        "deposit"
+      ],
+      "timestamp": 1791641364,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xf85c90d72c58c164ade7b264a29b6880b1c7be97099f47849f57c4143dec5db1",
+      "status": "CONFIRMED",
+      "from": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11885065,
+      "block_hash": "0xd29498023491ed122d4f9fdfd0fb90a3b99c96785b543d021a6d4f65b6fe48d1",
+      "confirmations": 406,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "deposit_money",
+          "event": "FundsReserved",
+          "args": {
+            "remittanceId": 2,
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "amount": 1000000000000000
+          },
+          "log_index": 36
+        },
+        {
+          "contract": "paynow",
+          "event": "RemittanceCreated",
+          "args": {
+            "remittanceId": 2,
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "amount": 1000000000000000,
+            "status": 0
+          },
+          "log_index": 37
+        }
+      ],
+      "actions": [
+        "transfer"
+      ],
+      "timestamp": 1791641676,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xe9a297cd30bca10c31a68b88ecca477319bce908d4545d93b64d5f4d158dac83",
+      "status": "CONFIRMED",
+      "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11885102,
+      "block_hash": "0xe3cc7930b35c1504cabb9d3a4de610fa422d0a3ff34899ceca77d1303decc488",
+      "confirmations": 369,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "RoleRegistry",
+          "event": "RoleRevoked",
+          "args": {
+            "wallet": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "role": 0,
+            "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+          },
+          "log_index": 29
+        }
+      ],
+      "actions": [
+        "revokeRole"
+      ],
+      "timestamp": 1791642120,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xf4b5220faab62424594ad36bdfc9092e7341149a66d663d4db0abb062ffaa580",
+      "status": "CONFIRMED",
+      "from": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11885128,
+      "block_hash": "0x09b19a77adb86b6c03b7d74e364003b0f663d0a91f58a932b8dd76b1e1b1a8e1",
+      "confirmations": 343,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "deposit_money",
+          "event": "ReservedFundsUnlocked",
+          "args": {
+            "remittanceId": 2,
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "amount": 1000000000000000
+          },
+          "log_index": 18
+        },
+        {
+          "contract": "paynow",
+          "event": "RemittanceCancelled",
+          "args": {
+            "remittanceId": 2,
+            "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+            "amount": 1000000000000000,
+            "status": 2
+          },
+          "log_index": 19
+        }
+      ],
+      "actions": [
+        "cancel"
+      ],
+      "timestamp": 1791642432,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0xbe8040bc5c08dd3a8be9548a7ebd3b5ea285ddba1fdcbc1e1ddf646ebeeffcd2",
+      "status": "CONFIRMED",
+      "from": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11885160,
+      "block_hash": "0xc186b520e6271d5175ed8a035d733e918c589a00ab73a28b89bb247c0ffc2063",
+      "confirmations": 311,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "deposit_money",
+          "event": "FundsWithdrawn",
+          "args": {
+            "owner": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+            "amount": 1000000000000000
+          },
+          "log_index": 21
+        }
+      ],
+      "actions": [
+        "withdraw"
+      ],
+      "timestamp": 1791642816,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0x424e7ea47c58a084d0bec781824d350bc1a816579301ab088927f9adc7aac766",
+      "status": "CONFIRMED",
+      "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11885184,
+      "block_hash": "0x2767eb5b2f59ae09a46de464c9b8bb6948b743a7934d686c4cd2c542ca79f5a4",
+      "confirmations": 287,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "RoleRegistry",
+          "event": "SystemPaused",
+          "args": {
+            "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+          },
+          "log_index": 44
+        }
+      ],
+      "actions": [
+        "pause"
+      ],
+      "timestamp": 1791643104,
+      "outer_sender_is_participant": true
+    },
+    {
+      "transaction_hash": "0x1fb6c70f0e4f0952700bd2f6397b0ef1c3df604ee3019e2a1b30a6312192be99",
+      "status": "CONFIRMED",
+      "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "block_number": 11885253,
+      "block_hash": "0x43bc5b52ad8db7b3e7253f63db22e2ed37cdaabda55908ecca4e36840a0820f2",
+      "confirmations": 218,
+      "canonical": true,
+      "source": "verified_rpc",
+      "deployment_logs": [
+        {
+          "contract": "RoleRegistry",
+          "event": "SystemUnpaused",
+          "args": {
+            "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+          },
+          "log_index": 44
+        }
+      ],
+      "actions": [
+        "unpause"
+      ],
+      "timestamp": 1791643932,
+      "outer_sender_is_participant": true
+    }
+  ],
+  "distinct_transaction_types": [
+    "authorizeRecipient",
+    "authorizeSender",
+    "cancel",
+    "claim",
+    "deposit",
+    "pause",
+    "revokeRole",
+    "transfer",
+    "unpause",
+    "withdraw"
+  ],
+  "remittances": [
+    {
+      "id": "1",
+      "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+      "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+      "amount": {
+        "wei": "1000000000000000",
+        "test_eth": "0.001"
+      },
+      "status": "COMPLETED",
+      "reservation_active": false,
+      "source": "verified_contract",
+      "authoritative": true,
+      "block_number": 11885470
+    },
+    {
+      "id": "2",
+      "sender": "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a",
+      "recipient": "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3",
+      "amount": {
+        "wei": "1000000000000000",
+        "test_eth": "0.001"
+      },
+      "status": "CANCELLED",
+      "reservation_active": false,
+      "source": "verified_contract",
+      "authoritative": true,
+      "block_number": 11885470
+    }
+  ],
+  "wallet_snapshot": {
+    "0x3e094d9068b48850f09Fc7cc70A7E24E5ed0442a": {
+      "roles": {
+        "available": true,
+        "source": "verified_contract",
+        "sender": false,
+        "recipient": false,
+        "admin": false,
+        "paused": false
+      },
+      "balances": {
+        "source": "verified_contract",
+        "authoritative": true,
+        "block_number": 11885470,
+        "available": {
+          "wei": "1000000000000000",
+          "test_eth": "0.001"
+        },
+        "reserved": {
+          "wei": "0",
+          "test_eth": "0.000000"
+        },
+        "deployment": {
+          "configured": true,
+          "deployment_verified": true,
+          "reader_available": true,
+          "wired": true,
+          "paused": false,
+          "chain_id": 11155111,
+          "deployment_id": "sc6113-sepolia-11884239",
+          "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+          "addresses": {
+            "RoleRegistry": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+            "deposit_money": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+            "paynow": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+          },
+          "block_number": 11885470,
+          "block_hash": "0x2b743771bfd9f194325995576257b54ec473b70e786571667072140a2040f583",
+          "remittance_count": "2"
+        }
+      }
+    },
+    "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd": {
+      "roles": {
+        "available": true,
+        "source": "verified_contract",
+        "sender": false,
+        "recipient": false,
+        "admin": true,
+        "paused": false
+      },
+      "balances": {
+        "source": "verified_contract",
+        "authoritative": true,
+        "block_number": 11885470,
+        "available": {
+          "wei": "0",
+          "test_eth": "0.000000"
+        },
+        "reserved": {
+          "wei": "0",
+          "test_eth": "0.000000"
+        },
+        "deployment": {
+          "configured": true,
+          "deployment_verified": true,
+          "reader_available": true,
+          "wired": true,
+          "paused": false,
+          "chain_id": 11155111,
+          "deployment_id": "sc6113-sepolia-11884239",
+          "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+          "addresses": {
+            "RoleRegistry": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+            "deposit_money": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+            "paynow": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+          },
+          "block_number": 11885470,
+          "block_hash": "0x2b743771bfd9f194325995576257b54ec473b70e786571667072140a2040f583",
+          "remittance_count": "2"
+        }
+      }
+    },
+    "0x890F63435Cf6F4D526F7062A282A94c74A50cFa3": {
+      "roles": {
+        "available": true,
+        "source": "verified_contract",
+        "sender": true,
+        "recipient": true,
+        "admin": false,
+        "paused": false
+      },
+      "balances": {
+        "source": "verified_contract",
+        "authoritative": true,
+        "block_number": 11885470,
+        "available": {
+          "wei": "0",
+          "test_eth": "0.000000"
+        },
+        "reserved": {
+          "wei": "0",
+          "test_eth": "0.000000"
+        },
+        "deployment": {
+          "configured": true,
+          "deployment_verified": true,
+          "reader_available": true,
+          "wired": true,
+          "paused": false,
+          "chain_id": 11155111,
+          "deployment_id": "sc6113-sepolia-11884239",
+          "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+          "addresses": {
+            "RoleRegistry": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+            "deposit_money": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+            "paynow": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+          },
+          "block_number": 11885470,
+          "block_hash": "0x2b743771bfd9f194325995576257b54ec473b70e786571667072140a2040f583",
+          "remittance_count": "2"
+        }
+      }
+    }
+  },
+  "indexing": {
+    "result": {
+      "confirmed_head": 11885465,
+      "confirmations_required": 6,
+      "caught_up": true,
+      "reconciled_reset": false,
+      "source": "verified_rpc_logs"
+    },
+    "record_counts": {
+      "indexed_transactions": 14,
+      "indexed_events": 18
+    },
+    "repeat_run_counts": {
+      "indexed_transactions": 14,
+      "indexed_events": 18
+    },
+    "idempotent": true
+  }
+}

@@ -1,0 +1,265 @@
+{
+  "network": "Sepolia",
+  "authentication": "Isolated server-session fixture; no real MetaMask login or transaction signing claimed.",
+  "blockchain_writes": 0,
+  "checks": [
+    {
+      "route": "/api/users/me",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "route": "/api/users/me/balances",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "route": "/api/remittances",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "route": "/api/transactions",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "route": "/api/transactions/0xa2b051bc68857ee471c8bf22d127907e903d69e79b70c40ec3426201b98a54c4/receipt",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "route": "/api/transactions/audit",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "route": "/api/users/roles/0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "check": "canonical wiring event indexed; repeat request creates no duplicates",
+      "passed": true
+    },
+    {
+      "check": "unsigned authorizeSender calldata/read-only simulation; no send",
+      "passed": true
+    }
+  ],
+  "responses": {
+    "/api/users/me": {
+      "deployment": {
+        "addresses": {
+          "RoleRegistry": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+          "deposit_money": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+          "paynow": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+        },
+        "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+        "block_hash": "0x22a36a1ef64b088de17633330691a86b85bc92943c29454c895dac5557967d67",
+        "block_number": 11884397,
+        "chain_id": 11155111,
+        "configured": true,
+        "deployment_id": "sc6113-sepolia-11884239",
+        "deployment_verified": true,
+        "paused": false,
+        "reader_available": true,
+        "remittance_count": "0",
+        "wired": true
+      },
+      "roles": {
+        "admin": true,
+        "available": true,
+        "paused": false,
+        "recipient": false,
+        "sender": false,
+        "source": "verified_contract"
+      },
+      "wallet": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+    },
+    "/api/users/me/balances": {
+      "authoritative": true,
+      "available": {
+        "test_eth": "0.000000",
+        "wei": "0"
+      },
+      "block_number": 11884398,
+      "deployment": {
+        "addresses": {
+          "RoleRegistry": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+          "deposit_money": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+          "paynow": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+        },
+        "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+        "block_hash": "0x82ce237f43486fbf41b63337398e51f791f3aac4173978da7c2577e1ebad2fdc",
+        "block_number": 11884398,
+        "chain_id": 11155111,
+        "configured": true,
+        "deployment_id": "sc6113-sepolia-11884239",
+        "deployment_verified": true,
+        "paused": false,
+        "reader_available": true,
+        "remittance_count": "0",
+        "wired": true
+      },
+      "reserved": {
+        "test_eth": "0.000000",
+        "wei": "0"
+      },
+      "source": "verified_contract"
+    },
+    "/api/remittances": {
+      "authoritative": true,
+      "discovery": "confirmed_event_index",
+      "indexing": {
+        "caught_up": true,
+        "confirmations_required": 6,
+        "confirmed_head": 11884394,
+        "reconciled_reset": false,
+        "source": "verified_rpc_logs"
+      },
+      "items": [],
+      "limit": 50,
+      "offset": 0,
+      "source": "verified_contract"
+    },
+    "/api/transactions": {
+      "authoritative": false,
+      "deployment_id": "sc6113-sepolia-11884239",
+      "indexing": {
+        "caught_up": true,
+        "confirmations_required": 6,
+        "confirmed_head": 11884395,
+        "reconciled_reset": false,
+        "source": "verified_rpc_logs"
+      },
+      "indexing_available": true,
+      "items": [
+        {
+          "block_hash": "0x294c450e858d0d680b0c9985c6d50ed8666cdf4ed82a7a80d9e8967f9f21fdbf",
+          "block_number": 11884306,
+          "chain_id": 11155111,
+          "deployment_id": "sc6113-sepolia-11884239",
+          "events": [
+            {
+              "block_hash": "0x294c450e858d0d680b0c9985c6d50ed8666cdf4ed82a7a80d9e8967f9f21fdbf",
+              "event_type": "RemittanceContractConfigured",
+              "log_index": 388,
+              "payload_json": "{\"contract\": \"deposit_money\", \"address\": \"0x630863E58375Db128EFEfA51Ee369141cCbb839A\", \"initiator\": \"0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd\", \"args\": {\"remittanceContract\": \"0xA2Ee37DD717a8758Eb864788456d047b296C00E8\", \"admin\": \"0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd\"}}",
+              "remittance_id": null
+            }
+          ],
+          "observed_at": 1791633692,
+          "receipt_status": 1,
+          "recipient_wallet": null,
+          "sender_wallet": "0x4a779fa7d5ea106f1adfb8369e65fcaa465ca7fd",
+          "tx_hash": "0xa2b051bc68857ee471c8bf22d127907e903d69e79b70c40ec3426201b98a54c4"
+        }
+      ],
+      "limit": 50,
+      "live_blockchain_checked": true,
+      "live_error": null,
+      "offset": 0,
+      "scope": "authenticated_wallet",
+      "source": "sqlite_index"
+    },
+    "/api/transactions/0xa2b051bc68857ee471c8bf22d127907e903d69e79b70c40ec3426201b98a54c4/receipt": {
+      "block_hash": "0x294c450e858d0d680b0c9985c6d50ed8666cdf4ed82a7a80d9e8967f9f21fdbf",
+      "block_number": 11884306,
+      "canonical": true,
+      "confirmations": 96,
+      "deployment_logs": [
+        {
+          "args": {
+            "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+            "remittanceContract": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+          },
+          "contract": "deposit_money",
+          "event": "RemittanceContractConfigured",
+          "log_index": 388
+        }
+      ],
+      "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+      "source": "verified_rpc",
+      "status": "CONFIRMED",
+      "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+      "transaction_hash": "0xa2b051bc68857ee471c8bf22d127907e903d69e79b70c40ec3426201b98a54c4"
+    },
+    "/api/transactions/audit": {
+      "authoritative": false,
+      "indexing": {
+        "caught_up": true,
+        "confirmations_required": 6,
+        "confirmed_head": 11884397,
+        "reconciled_reset": false,
+        "source": "verified_rpc_logs"
+      },
+      "items": [
+        {
+          "block_hash": "0x294c450e858d0d680b0c9985c6d50ed8666cdf4ed82a7a80d9e8967f9f21fdbf",
+          "block_number": 11884306,
+          "chain_id": 11155111,
+          "deployment_id": "sc6113-sepolia-11884239",
+          "events": [
+            {
+              "block_hash": "0x294c450e858d0d680b0c9985c6d50ed8666cdf4ed82a7a80d9e8967f9f21fdbf",
+              "event_type": "RemittanceContractConfigured",
+              "log_index": 388,
+              "payload_json": "{\"contract\": \"deposit_money\", \"address\": \"0x630863E58375Db128EFEfA51Ee369141cCbb839A\", \"initiator\": \"0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd\", \"args\": {\"remittanceContract\": \"0xA2Ee37DD717a8758Eb864788456d047b296C00E8\", \"admin\": \"0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd\"}}",
+              "remittance_id": null
+            }
+          ],
+          "observed_at": 1791633692,
+          "receipt_status": 1,
+          "recipient_wallet": null,
+          "sender_wallet": "0x4a779fa7d5ea106f1adfb8369e65fcaa465ca7fd",
+          "tx_hash": "0xa2b051bc68857ee471c8bf22d127907e903d69e79b70c40ec3426201b98a54c4"
+        }
+      ],
+      "live_blockchain_checked": true,
+      "source": "sqlite_index"
+    },
+    "/api/users/roles/0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd": {
+      "admin": true,
+      "available": true,
+      "paused": false,
+      "recipient": false,
+      "sender": false,
+      "source": "verified_contract"
+    },
+    "unsigned_admin_simulation": {
+      "action": "authorizeSender",
+      "deployment": {
+        "addresses": {
+          "RoleRegistry": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+          "deposit_money": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+          "paynow": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+        },
+        "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+        "block_hash": "0x07b900ab71f0f6660079e8bb77bb96af4b500505e36a58114c9b2da8a4fea832",
+        "block_number": 11884406,
+        "chain_id": 11155111,
+        "configured": true,
+        "deployment_id": "sc6113-sepolia-11884239",
+        "deployment_verified": true,
+        "paused": false,
+        "reader_available": true,
+        "remittance_count": "0",
+        "wired": true
+      },
+      "gas_estimate": "129319",
+      "transaction": {
+        "chainId": "0xaa36a7",
+        "data": "0x53755b8f0000000000000000000000004a779fa7d5ea106f1adfb8369e65fcaa465ca7fd",
+        "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+        "gas": "0x25e2f",
+        "to": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+        "value": "0x0"
+      },
+      "unsigned": true
+    }
+  },
+  "transient_errors": [],
+  "earlier_run_observation": "Six read routes passed; initial run stopped on transient RPC unavailability at role lookup.",
+  "pass_count": 9
+}

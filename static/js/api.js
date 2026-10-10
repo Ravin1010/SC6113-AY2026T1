@@ -4,9 +4,9 @@ export class APIError extends Error {
   }
 }
 
-export async function requestAPI(path, options = {}) {
+async function fetchAPI(path, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), path.startsWith('/api/auth/') ? 12000 : 60000);
   try {
     const response = await fetch(path, {credentials: 'same-origin', cache: 'no-store', ...options, signal: controller.signal});
     let data;
@@ -43,4 +43,15 @@ export function friendlyError(error) {
     AUTH_REQUIRED: 'Your session ended. Sign in again to continue.'
   };
   return deploymentMessages[error.code] || messages[error.code] || error.message || 'The request could not be completed. Try again.';
+}
+
+// Share concurrent identical reads, never completed financial responses or writes.
+const reads = new Map();
+export function requestAPI(path, options = {}) {
+  if (Object.keys(options).length) return fetchAPI(path, options);
+  if (!reads.has(path)) {
+    const pending = fetchAPI(path).finally(() => { if (reads.get(path) === pending) reads.delete(path); });
+    reads.set(path, pending);
+  }
+  return reads.get(path);
 }

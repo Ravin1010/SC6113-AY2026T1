@@ -462,3 +462,6 @@ dd {
     margin-top:.75rem;
   }
 }
+
+/* Live transaction hashes must wrap inside phone-width form cards. */
+.form-result { overflow-wrap:anywhere; min-width:0; }

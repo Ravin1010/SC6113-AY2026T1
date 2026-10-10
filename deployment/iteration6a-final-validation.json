@@ -1,0 +1,75 @@
+{
+  "recorded_at_utc": "2026-10-10T15:38:20.550936+00:00",
+  "branch": "feature/iteration-6a-sepolia-integration",
+  "base_commit": "6dca6f3424d2c6ef929c186204df799904d96fbf",
+  "compiler": {
+    "version": "0.8.34+commit.80d5c536.Emscripten.clang",
+    "contracts": 3,
+    "warnings": 0,
+    "optimizer_runs": 200,
+    "evm": "shanghai"
+  },
+  "regressions": {
+    "python": {
+      "passed": 63,
+      "failed": 0
+    },
+    "browser": {
+      "passed": 40,
+      "failed": 0,
+      "widths_px": [
+        360,
+        768,
+        1280
+      ]
+    },
+    "contract_sanity": {
+      "groups_passed": 10,
+      "expected_rejections": 50
+    },
+    "local_http": {
+      "assertions_passed": 8,
+      "canonical_events": 12,
+      "repeat_index_unchanged": true
+    },
+    "dependency_check": "passed",
+    "git_diff_check": "passed"
+  },
+  "live_evidence": {
+    "file": "deployment/live-smoke-evidence.json",
+    "distinct_user_transaction_types": 10,
+    "existing_user_transactions": 13,
+    "wiring_transactions_excluded": 1,
+    "indexed_transactions": 14,
+    "indexed_events": 18,
+    "idempotent": true,
+    "new_blockchain_transactions_sent_during_finalization": 0
+  },
+  "scope": {
+    "frozen_solidity_sha256": {
+      "contracts/RoleRegistry.sol": "5a319620caa6c91b0e27e1c02110d3ae59fdd20f980755f923b338644a73d013",
+      "contracts/deposit_money.sol": "383cfaeded4f462dea4cadc2dd5eae0dbbff25d6e7cbfacea60c594c4ac94f1c",
+      "contracts/transfer_money.sol": "00ae122fff84f10d2b21d20bb290f7e94454a2cb9eaebcbf462ea01665202184"
+    },
+    "user_db_sha256": "108de2caedd2c73374229f955de1e183387590b1031d05b242b03d386dbfe7cb",
+    "main_unchanged": "92707ce35aa22246d6cfd5592e85b52f33ddb7bc",
+    "schema_unchanged": true,
+    "no_render_or_turso_changes": true,
+    "no_formal_report_slides_or_drive_changes": true,
+    "no_iteration_6b": true
+  },
+  "commands": [
+    "npm run compile:contracts",
+    "npm run sanity:contracts",
+    "python -m unittest discover -s tests -p test_*.py -q",
+    "python -m pip check",
+    "PYTHON=python node tests/local-chain.cjs",
+    "PYTHON=python CHROMIUM_EXECUTABLE_PATH=/path/to/chromium node --test tests/frontend.cjs",
+    "python scripts/read-smoke-evidence.py (public RPC; read-only)",
+    "git diff --check"
+  ],
+  "warnings": [
+    "Ganache optional native uWS unavailable; supported JavaScript fallback used.",
+    "npm environment http-proxy option warning; commands succeeded."
+  ]
+}

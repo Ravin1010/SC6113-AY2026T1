@@ -1,6 +1,7 @@
 import {requestAPI, friendlyError, deploymentMessages} from './api.js';
 import {walletLogin, readSession, endSession, walletConnection} from './auth.js';
 import {setupForms} from './forms.js';
+import {setupLive} from './live.js';
 
 const byId = id => document.getElementById(id);
 let session = null, generation = 0, busy = false, historyOffset = 0;
@@ -13,13 +14,14 @@ function notice(message, error = false) {
 }
 
 function displaySession(value) {
+  live.invalidate();
   session = value;
   byId('login-panel').hidden = Boolean(value);
   byId('logout').hidden = !value;
   if (byId('session-content')) byId('session-content').hidden = !value;
   setText('wallet-address', value?.wallet || 'Unavailable');
   setText('session-status', value ? 'Authenticated session' : 'Not authenticated');
-  // No configuration, API response, role or form validation can enable blockchain writes in Iteration 5.
+  // Fail closed while refreshed identity/deployment reads are pending.
   document.querySelectorAll('[data-blockchain-action]').forEach(button => { button.disabled = true; });
   if (!value) {
     historyOffset = 0;
@@ -47,14 +49,14 @@ function deployment(error) {
   setText('deployment-detail', [error.code, detail?.missing?.length ? `Missing: ${detail.missing.join(', ')}` : '', detail?.invalid?.length ? `Invalid: ${detail.invalid.join(', ')}` : ''].filter(Boolean).join(' · '));
 }
 
-async function loadDeployment(ticket) {
+async function loadDeployment(ticket,account,connection) {
   try {
-    await requestAPI('/api/users/me/balances');
-    if (ticket === generation) deployment({code: 'BLOCKCHAIN_READER_UNAVAILABLE'});
+    const balances = await requestAPI('/api/users/me/balances');
+    if (ticket === generation) await live.set(account,balances,connection);
   } catch (error) {
     if (ticket !== generation) return;
     if (error.code === 'AUTH_REQUIRED') throw error;
-    deployment(error);
+    live.invalidate(); deployment(error);
     if (!deploymentMessages[error.code]) notice(friendlyError(error), true);
   }
 }
@@ -69,6 +71,11 @@ function historyCard(record) {
     const description = document.createElement('dd'); description.textContent = String(value ?? 'Not indexed'); description.className = 'identifier';
     data.append(term, description);
   }
+  if (Array.isArray(record.events)) {
+    const events = document.createElement('p'); events.className = 'identifier';
+    events.textContent = record.events.map(event => `${event.event_type} · log ${event.log_index}${event.remittance_id ? ' · remittance #'+event.remittance_id : ''}`).join('; ');
+    card.append(events);
+  }
   return card;
 }
 
@@ -81,8 +88,8 @@ async function loadHistory(ticket) {
   try {
     const data = await requestAPI(`/api/transactions?limit=${historyLimit}&offset=${historyOffset}`);
     if (ticket !== generation || !session) return;
-    if (data.source !== 'sqlite_index' || data.authoritative !== false || data.live_blockchain_checked !== false || !Array.isArray(data.items)) throw new Error('History provenance could not be confirmed. No records are displayed.');
-    setText('history-provenance', `Source: cached SQLite index · Not authoritative · Live blockchain not checked · ${data.indexing_available ? 'Indexed data available' : 'Indexer not active'}.`);
+    if (data.source !== 'sqlite_index' || data.authoritative !== false || typeof data.live_blockchain_checked !== 'boolean' || !Array.isArray(data.items)) throw new Error('History provenance could not be confirmed. No records are displayed.');
+    setText('history-provenance', `Source: cached SQLite index · Not authoritative · Live blockchain ${data.live_blockchain_checked ? 'checked' : 'not checked'} · ${data.indexing_available ? 'Indexed data available' : 'Indexer not active'}.`);
     setText('history-status', data.items.length ? `${data.items.length} indexed record(s) on this page.` : historyOffset ? 'No indexed transactions on this page.' : 'No indexed transactions available yet. This does not establish that blockchain history is empty.');
     byId('history-records').replaceChildren(...data.items.map(historyCard));
     previous.disabled = historyOffset === 0; next.disabled = data.items.length < historyLimit;
@@ -108,11 +115,11 @@ async function loadAccount(ticket) {
     notice('Your authenticated wallet differs from the connected wallet. Log out and sign in with the intended account.', true);
   }
   if (data.roles?.error) deployment(data.roles.error);
-  await Promise.all([loadDeployment(ticket), loadHistory(ticket)]);
+  await Promise.all([loadDeployment(ticket,data,connection), loadHistory(ticket)]);
 }
 
-async function restore() {
-  if (busy) return;
+let restoring=null;
+async function restoreState() {
   const ticket = ++generation;
   try {
     const current = await readSession();
@@ -133,7 +140,7 @@ byId('login').addEventListener('click', async () => {
   try {
     const current = await walletLogin(() => ticket === generation);
     if (ticket !== generation) return;
-    displaySession(current); notice('Wallet session authenticated. Blockchain actions remain unavailable.');
+    displaySession(current); notice('Wallet session authenticated. Checking deployment and permissions…');
     await loadAccount(ticket);
   } catch (error) { if (ticket === generation) handleError(error); }
   finally { setBusy(false); }
@@ -148,7 +155,7 @@ byId('logout').addEventListener('click', async () => {
 });
 
 byId('refresh')?.addEventListener('click', async () => {
-  if (!session || busy) return;
+  if (!session || busy || live.isSending()) return;
   const ticket = ++generation; setBusy(true); notice('');
   try { const current = await readSession(); if (ticket !== generation) return; displaySession(current); await loadAccount(ticket); }
   catch (error) { if (ticket === generation) handleError(error); }
@@ -157,9 +164,9 @@ byId('refresh')?.addEventListener('click', async () => {
 
 for (const [id, direction] of [['previous-history', -1], ['next-history', 1]]) {
   byId(id)?.addEventListener('click', async () => {
-    if (!session || busy) return;
+    if (!session || busy || live.isSending()) return;
     historyOffset = Math.max(0, historyOffset + direction * historyLimit);
-    const ticket = ++generation;
+    const ticket = generation;
     try { await loadHistory(ticket); } catch (error) { if (ticket === generation) handleError(error); }
   });
 }
@@ -170,6 +177,15 @@ toggle.addEventListener('click', () => { const open = nav.classList.toggle('open
 nav.addEventListener('click', event => { if (event.target.closest('a,button')) closeMenu(); });
 nav.addEventListener('keydown', event => { if (event.key === 'Escape') { closeMenu(); toggle.focus(); } });
 
+function restore() {
+  if(!restoring)restoring=restoreState().finally(()=>{restoring=null;});
+  return restoring;
+}
+async function refreshSelective(options) {
+  if(options?.history) return loadHistory(generation);
+  return restore();
+}
+const live = setupLive(() => session, handleError, refreshSelective);
 setupForms(() => session?.wallet || '');
 window.ethereum?.on?.('accountsChanged', async () => {
   const old = session; generation++; displaySession(null);
@@ -177,12 +193,28 @@ window.ethereum?.on?.('accountsChanged', async () => {
   if (old) { try { await endSession(old.csrf_token); } catch (error) { if (error.code !== 'AUTH_REQUIRED') notice(`Wallet changed. ${friendlyError(error)} Log out again or retry before continuing.`, true); } }
 });
 window.ethereum?.on?.('chainChanged', async () => {
-  if (!session || busy) return;
-  const ticket = generation, connection = await walletConnection();
-  if (ticket === generation) setText('wallet-network', connection.network);
+  // A network change invalidates the entire read context, even during a send.
+  generation++; live.invalidate();
+  if(restoring) await restoring;
+  if(session) await restore();
 });
-window.addEventListener('focus', () => { if (!busy) restore(); });
-window.addEventListener('pageshow', event => { if (event.persisted) restore(); });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !busy) restore(); });
+// Focus/navigation does not invalidate verified deployment or financial reads.
+// Revalidate only the session after returning from another tab/browser history.
+let checkingSession=null;
+function checkSession(){
+  if(!session || busy || live.isSending())return;
+  if(!checkingSession){
+    const expected=session;
+    checkingSession=readSession().then(current=>{
+      if(session!==expected)return;
+      if(current.wallet.toLowerCase()!==expected.wallet.toLowerCase())return restore();
+      Object.assign(expected,current);
+    }).catch(handleError).finally(()=>{checkingSession=null;});
+  }
+  return checkingSession;
+}
+window.addEventListener('focus',checkSession);
+window.addEventListener('pageshow',event=>{if(event.persisted)checkSession();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkSession();});
 displaySession(null);
 restore();

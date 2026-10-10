@@ -10,3 +10,6 @@ __pycache__/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Separate local live-integration database; never commit wallet/session records
+local-sepolia.db

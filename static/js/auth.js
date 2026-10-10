@@ -49,6 +49,6 @@ export async function walletConnection() {
     const accounts = await window.ethereum.request({method: 'eth_accounts'});
     const chain = await window.ethereum.request({method: 'eth_chainId'});
     const network = chain === '0xaa36a7' ? 'Sepolia · test network' : `Wallet chain ${chain} · Sepolia required for future transactions`;
-    return {address: accounts?.[0] || 'Not connected', network};
+    return {address: accounts?.[0] || 'Not connected', network, chainId: chain};
   } catch { return {address: 'Wallet connection unavailable', network: 'Unavailable'}; }
 }

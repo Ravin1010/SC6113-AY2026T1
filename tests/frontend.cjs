@@ -42,7 +42,9 @@ async function pageWithWallet(mode = 'normal', width = 1280) {
         await window.__testMethod(method);
         if (window.__walletMode === 'reject-connect' && method === 'eth_requestAccounts') throw {code: 4001};
         if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [window.__walletAddress];
-        if (method === 'eth_chainId') return '0xaa36a7';
+        if (method === 'eth_chainId') return window.__walletChain || '0xaa36a7';
+        if (method === 'eth_sendTransaction' && window.__walletMode === 'live-test') {window.__sent= params[0]; return '0x'+'f'.repeat(64);}
+        if (method === 'eth_sendTransaction' && window.__walletMode === 'reject-tx') throw {code:4001};
         if (method === 'personal_sign') {
           if (window.__walletMode === 'reject-sign') throw {code: 4001};
           if (window.__walletMode === 'change-wallet') { window.__walletAddress = '0x'+'d'.repeat(40); }
@@ -249,9 +251,147 @@ test('no historical contract code, wallet transactions or browser exceptions', (
     if(!/\.(html|js|css)$/.test(path))continue;
     const text=readFileSync(path,'utf8');
     assert.doesNotMatch(text,/0x1b6fc422422447D20aF3d26aEd82AB79E5520f48|0x91C798dEc35104fd1610D38a84aE89F2B94F0351/i);
-    assert.doesNotMatch(text,/eth_sendTransaction|eth_sendRawTransaction|wallet_sendCalls|new Web3|\.methods\./);
+    assert.doesNotMatch(text,/eth_sendRawTransaction|wallet_sendCalls|new Web3|\.methods\./);
+    if(!path.endsWith('/live.js')) assert.doesNotMatch(text,/eth_sendTransaction/);
   }
   assert.ok(methods.includes('personal_sign'));
   assert.ok(methods.every(method=>['eth_requestAccounts','eth_accounts','eth_chainId','personal_sign'].includes(method)));
   assert.deepEqual(browserErrors,[]);
+});
+
+// Integration fixtures below are explicit mocks; no chain writes occur.
+const {Interface} = require('ethers');
+const fixtureAddresses={RoleRegistry:'0x'+'1'.repeat(40),deposit_money:'0x'+'2'.repeat(40),paynow:'0x'+'3'.repeat(40)};
+async function verifiedRoutes(page,{admin=true,sender=true,paused=false,wired=true,targetSender=false,targetRecipient=true,claim=false}={}) {
+  const deployment={deployment_verified:true,wired,paused,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20};
+  await page.route('**/api/users/me',route=>route.fulfill({json:{wallet:account.address,roles:{available:true,source:'verified_contract',admin,sender,recipient:false},deployment}}));
+  await page.route('**/api/users/me/balances',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1000000000000000000',test_eth:'1'},reserved:{wei:'0',test_eth:'0'},deployment}}));
+  await page.route('**/api/users/roles/**',route=>route.fulfill({json:{available:true,source:'verified_contract',sender:targetSender,recipient:targetRecipient}}));
+  await page.route('**/api/remittances?*',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,items:[],indexing:{caught_up:true}}}));
+  await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:claim?'0x'+'e'.repeat(40):account.address,recipient:claim?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},status:'PENDING'}}));
+  await page.route('**/api/transactions?*',route=>route.fulfill({json:{source:'sqlite_index',authoritative:false,live_blockchain_checked:true,indexing_available:true,items:[]}}));
+  await page.route('**/api/transactions/*/receipt',route=>route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:6,transaction_hash:'0x'+'f'.repeat(64)}}));
+  await page.route('**/api/transactions/prepare',route=>{
+    const {action,arguments:args}=route.request().postDataJSON();
+    const name=['authorizeSender','authorizeRecipient','revokeRole','pause','unpause'].includes(action)?'RoleRegistry':['deposit','withdraw'].includes(action)?'deposit_money':'paynow';
+    const iface=new Interface(JSON.parse(readFileSync(join(repo,'static/abi',name+'.json'))));
+    const parameters=action==='revokeRole'?[args.wallet,args.role]:['authorizeSender','authorizeRecipient'].includes(action)?[args.wallet]:action==='withdraw'?[args.amount_wei]:action==='transfer'?[args.wallet,args.amount_wei]:['claim','cancel'].includes(action)?[args.remittance_id]:[];
+    route.fulfill({json:{unsigned:true,action,deployment,gas_estimate:'50000',transaction:{from:account.address,to:fixtureAddresses[name],chainId:'0xaa36a7',data:iface.encodeFunctionData(action,parameters),value:action==='deposit'?'0x'+BigInt(args.amount_wei).toString(16):'0x0',gas:'0xc350'}}});
+  });
+}
+for (const action of ['authorizeSender','authorizeRecipient','revokeRole','pause','unpause','deposit','withdraw','transfer','claim','cancel']) test(`verified UI prepares and wallet-submits ${action} (mock only)`,async()=>{
+  const {page,context}=await pageWithWallet('live-test',360);
+  await verifiedRoutes(page,{paused:action==='unpause',targetSender:action==='revokeRole',targetRecipient:action!=='authorizeRecipient',claim:action==='claim',sender:!['withdraw','cancel','claim'].includes(action)});
+  const route=['deposit','withdraw'].includes(action)?'/depositMoney':['transfer','claim','cancel'].includes(action)?'/transferMoney':'/main';
+  await guest(page,route);await login(page);
+  if(['authorizeSender','authorizeRecipient','revokeRole'].includes(action))await page.locator('#admin-wallet').fill('0x'+'e'.repeat(40));
+  if(action==='deposit')await page.locator('#deposit-amount').fill('0.001');
+  if(action==='withdraw')await page.locator('#withdraw-amount').fill('0.001');
+  if(action==='transfer'){await page.locator('#recipient-wallet').fill('0x'+'e'.repeat(40));await page.locator('#remittance-amount').fill('0.001');}
+  if(action==='claim'||action==='cancel')await page.locator('#remittance-id').fill('1');
+  const button=page.locator(`[data-blockchain-action="${action}"]`);
+  await waitFor(()=>button.isEnabled(),`Action ${action} should be eligible`);await button.click();
+  await waitFor(()=>page.evaluate(()=>Boolean(window.__sent)),`Action ${action} should request wallet submission`);
+  const sent=await page.evaluate(()=>window.__sent);assert.equal(sent.chainId,'0xaa36a7');assert.equal(sent.from.toLowerCase(),account.address.toLowerCase());
+  assert.equal(sent.value,action==='deposit'?'0x38d7ea4c68000':'0x0');
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await waitFor(async()=> (await page.locator('.form-result,#transaction-status').allTextContents()).some(text=>text.includes('Confirmed (6 confirmations)')));
+  await context.close();
+});
+
+test('verified controls fail closed for wrong chain, unwired deployment and paused financial state',async()=>{
+  for(const condition of ['wrong-chain','unwired','paused']){
+    const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page,{wired:condition!=='unwired',paused:condition==='paused'});
+    if(condition==='wrong-chain')await page.addInitScript(()=>window.__walletChain='0x1');
+    await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');await pause(600);
+    assert.equal(await page.locator('[data-blockchain-action="deposit"]').isEnabled(),false);assert.equal(await page.evaluate(()=>Boolean(window.__sent)),false);await context.close();
+  }
+});
+
+test('ordinary wallet never gets Admin controls and chain change immediately disables writes',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page,{admin:false});await guest(page);await login(page);await page.locator('#admin-wallet').fill('0x'+'e'.repeat(40));await pause(500);
+  await assertDisabled(page);await page.goto(origin+'/depositMoney');await page.waitForLoadState('networkidle');await page.locator('#deposit-amount').fill('0.001');
+  await waitFor(()=>page.locator('[data-blockchain-action="deposit"]').isEnabled());
+  await page.evaluate(()=>{window.__walletChain='0x1';window.__emitWallet('chainChanged','0x1');});
+  await assertDisabled(page);assert.equal(await page.evaluate(()=>Boolean(window.__sent)),false);await context.close();
+});
+
+test('rejected blockchain signature is reported without fabricated success',async()=>{
+  const {page,context}=await pageWithWallet('reject-tx');await verifiedRoutes(page);await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
+  const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());await button.click();
+  await waitFor(async()=> (await page.locator('#deposit-result').textContent()).includes('cancelled'));assert.equal(await page.evaluate(()=>Boolean(window.__sent)),false);await context.close();
+});
+
+test('live browser checks produced no uncaught exceptions',()=>assert.deepEqual(browserErrors,[]));
+
+for(const action of ['claim','cancel'])test(`${action} refreshes terminal detail and balance without full reload`,async()=>{
+  const {page,context}=await pageWithWallet('live-test');
+  await verifiedRoutes(page,{claim:action==='claim',sender:false});
+  let terminal=false,detailReads=0,balanceReads=0,identityReads=0;
+  await page.route('**/api/users/me/balances',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:terminal?'2':'1',test_eth:terminal?'0.000000000000000002':'0.000000000000000001'},reserved:{wei:terminal?'0':'1',test_eth:terminal?'0':'0.000000000000000001'},deployment:{deployment_verified:true,wired:true,paused:false,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20}}}));
+
+  page.on('request',request=>{if(new URL(request.url()).pathname==='/api/users/me')identityReads++;});
+  await page.route('**/api/remittances/1',route=>{
+    detailReads++;
+    return route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:action==='claim'?'0x'+'e'.repeat(40):account.address,recipient:action==='claim'?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},status:terminal?(action==='claim'?'COMPLETED':'CANCELLED'):'PENDING'}});
+  });
+  await page.route('**/api/transactions/*/receipt',route=>{terminal=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:6}});});
+  page.on('request',request=>{if(new URL(request.url()).pathname==='/api/users/me/balances')balanceReads++;});
+  await guest(page,'/transferMoney');await login(page);await page.locator('#remittance-id').fill('1');
+  const button=page.locator(`[data-blockchain-action="${action}"]`);await waitFor(()=>button.isEnabled());
+  assert.equal(detailReads,1,'claim/cancel eligibility shares a single ID read');
+  const beforeIdentity=identityReads,beforeBalance=balanceReads;
+  await button.click();
+  await waitFor(async()=> (await page.locator('#remittance-detail').textContent()).includes(action==='claim'?'COMPLETED':'CANCELLED'));
+  assert.equal(detailReads,2);assert.equal(identityReads,beforeIdentity);assert.equal(balanceReads,beforeBalance+1);
+  assert.ok(await page.locator('[data-blockchain-action="claim"]').isDisabled());
+  assert.ok(await page.locator('[data-blockchain-action="cancel"]').isDisabled());
+  await context.close();
+});
+
+test('ordinary clicks, section navigation and focus never reload full chain state; network changes do',async()=>{
+  const {page,context}=await pageWithWallet('live-test',360);await verifiedRoutes(page);
+  const counts={identity:0,balance:0,list:0};
+  page.on('request',request=>{const path=new URL(request.url()).pathname;if(path==='/api/users/me')counts.identity++;if(path==='/api/users/me/balances')counts.balance++;if(path==='/api/remittances')counts.list++;});
+  await guest(page);await login(page);await page.waitForLoadState('networkidle');
+  const before={...counts};
+  await page.locator('#menu-toggle').click();
+  await page.evaluate(()=>{document.querySelector('#site-nav a[href*="#activity"]')?.click();window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('focus'));});
+  await page.waitForLoadState('networkidle');assert.deepEqual(counts,before);
+  await page.evaluate(()=>{window.__walletChain='0x1';window.__emitWallet('chainChanged','0x1');});
+  await waitFor(()=>counts.balance===before.balance+1);await page.waitForLoadState('networkidle');
+  assert.equal(counts.identity,before.identity+1);await assertDisabled(page);
+  await page.evaluate(()=>{window.__walletChain='0xaa36a7';window.__emitWallet('chainChanged','0xaa36a7');});
+  await waitFor(()=>counts.balance===before.balance+2);
+  await page.evaluate(()=>{window.__walletAddress='0x'+'d'.repeat(40);window.__emitWallet('accountsChanged',[window.__walletAddress]);});
+  await waitFor(()=>page.locator('#login').isVisible());await assertDisabled(page);
+  const afterChange={...counts};await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await pause(200);
+  assert.deepEqual(counts,afterChange,'changed account must not reuse authenticated chain state');
+  await context.close();
+});
+
+test('admin eligibility deduplicates target role reads across actions and ordinary inputs',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);let reads=0;
+  page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/users/roles/'))reads++;});
+  await guest(page);await login(page);await page.locator('#admin-wallet').fill('0x'+'e'.repeat(40));
+  await waitFor(()=>page.locator('[data-blockchain-action="authorizeSender"]').isEnabled());
+  assert.equal(reads,1);
+  await page.locator('#ordinary-role').selectOption('recipient');await pause(450);assert.equal(reads,1);
+  await context.close();
+});
+
+for(const action of ['pause','authorizeSender'])test(`${action} refreshes affected authorization/pause state without balances or remittance list`,async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page,{sender:false,targetRecipient:false});
+  let applied=false,balanceReads=0,listReads=0;
+  const deployment={deployment_verified:true,wired:true,paused:false,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20};
+  await page.route('**/api/users/me',route=>route.fulfill({json:{wallet:account.address,roles:{available:true,source:'verified_contract',admin:true,sender:action==='authorizeSender'&&applied,recipient:false,paused:action==='pause'&&applied},deployment:{...deployment,paused:action==='pause'&&applied}}}));
+  await page.route('**/api/users/roles/**',route=>route.fulfill({json:{available:true,source:'verified_contract',sender:applied,recipient:false}}));
+  await page.route('**/api/transactions/*/receipt',route=>{applied=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:6}});});
+  page.on('request',request=>{const path=new URL(request.url()).pathname;if(path==='/api/users/me/balances')balanceReads++;if(path==='/api/remittances')listReads++;});
+  await guest(page);await login(page);if(action==='authorizeSender')await page.locator('#admin-wallet').fill(account.address);
+  const button=page.locator(`[data-blockchain-action="${action}"]`);await waitFor(()=>button.isEnabled());
+  const before=[balanceReads,listReads];await button.click();
+  await waitFor(async()=>action==='pause'?await page.locator('[data-blockchain-action="unpause"]').isEnabled():(await page.locator('#role-status').textContent()).includes('Sender'));
+  assert.deepEqual([balanceReads,listReads],before);
+  assert.ok(await button.isDisabled());await context.close();
 });

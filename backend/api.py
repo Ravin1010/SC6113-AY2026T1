@@ -13,8 +13,12 @@ from eth_keys.exceptions import BadSignature
 from eth_utils import is_address, is_checksum_address, to_checksum_address
 from flask import Blueprint, current_app, g, jsonify, request, session
 from werkzeug.exceptions import HTTPException
-from .blockchain import unavailable_state
+from .blockchain import unavailable_state, get_reader, BlockchainError, configuration_status
+from .indexer import index_events
+from .preparation import prepare
 from .database import get_db
+from web3.exceptions import Web3Exception
+from requests.exceptions import RequestException
 
 api = Blueprint('api', __name__, url_prefix='/api')
 
@@ -46,6 +50,12 @@ def http_error(error):
 def storage_error(error):
     current_app.logger.exception('Application storage operation failed')
     return jsonify(error={'code': 'STORAGE_UNAVAILABLE', 'message': 'Application storage is unavailable.'}), 503
+
+
+@api.errorhandler(Web3Exception)
+@api.errorhandler(RequestException)
+def rpc_error(error):
+    return api_error(APIError(503, 'BLOCKCHAIN_READER_UNAVAILABLE', 'RPC read failed. Actions remain disabled.'))
 
 
 @api.after_request
@@ -108,9 +118,15 @@ def authenticated(function):
     return wrapped
 
 
-def blockchain_unavailable():
-    code, message, state = unavailable_state()
-    raise APIError(503, code, message, state)
+@api.errorhandler(BlockchainError)
+def blockchain_error(error):
+    return api_error(APIError(error.status, error.code, error.message, configuration_status()))
+
+
+def csrf_check():
+    supplied = request.headers.get('X-CSRF-Token', '')
+    if not supplied or not hmac.compare_digest(supplied.encode(), session.get('csrf_token', '').encode()):
+        raise APIError(403, 'CSRF_REQUIRED', 'A valid session CSRF token is required.')
 
 
 @api.post('/auth/nonce')
@@ -204,15 +220,25 @@ def logout():
 @authenticated
 def me():
     row = get_db().execute('SELECT created_at,last_login_at FROM app_wallets WHERE wallet_address=?', (g.wallet,)).fetchone()
-    code, message, _state = unavailable_state()
-    return jsonify(wallet=to_checksum_address(g.wallet), application_metadata=dict(row),
-                   roles={'available': False, 'source': 'RoleRegistry', 'error': {'code': code, 'message': message}})
+    try:
+        reader = get_reader()
+        roles, deployment = reader.user(g.wallet), reader.state()
+    except BlockchainError as error:
+        roles = {'available': False, 'source': 'RoleRegistry', 'error': {'code': error.code, 'message': error.message}}
+        deployment = configuration_status()
+    return jsonify(wallet=to_checksum_address(g.wallet), application_metadata=dict(row), roles=roles, deployment=deployment)
 
 
 @api.get('/users/me/balances')
 @authenticated
 def balances():
-    blockchain_unavailable()
+    return jsonify(get_reader().balances(g.wallet))
+
+
+@api.get('/users/roles/<address>')
+@authenticated
+def user_roles(address):
+    return jsonify(get_reader().user(wallet(address)))
 
 
 def pagination():
@@ -230,8 +256,14 @@ def pagination():
 @api.get('/remittances')
 @authenticated
 def remittances():
-    pagination()
-    blockchain_unavailable()
+    limit, offset = pagination()
+    reader = get_reader()
+    progress = index_events(reader)
+    # Index identifies relevant IDs; every returned financial record is read from contracts.
+    rows = get_db().execute("SELECT DISTINCT remittance_id FROM indexed_events e JOIN indexed_transactions t USING(chain_id,deployment_id,tx_hash) WHERE e.chain_id=11155111 AND e.deployment_id=? AND e.remittance_id IS NOT NULL AND (t.sender_wallet=? OR t.recipient_wallet=?) ORDER BY length(remittance_id) DESC,remittance_id DESC LIMIT ? OFFSET ?",
+                            (reader.manifest['deploymentId'],g.wallet,g.wallet,limit,offset)).fetchall()
+    items = [reader.remittance(int(row[0])) for row in rows]
+    return jsonify(items=items, source='verified_contract', authoritative=True, discovery='confirmed_event_index', indexing=progress, limit=limit, offset=offset)
 
 
 @api.get('/remittances/<int:remittance_id>')
@@ -239,7 +271,24 @@ def remittances():
 def remittance(remittance_id):
     if not 0 < remittance_id < 2**256:
         raise APIError(400, 'INVALID_REMITTANCE_ID', 'A positive uint256 remittance ID is required.')
-    blockchain_unavailable()
+    reader = get_reader()
+    item = reader.remittance(remittance_id)
+    if g.wallet not in (item['sender'].lower(), item['recipient'].lower()) and not reader.user(g.wallet)['admin']:
+        raise APIError(403, 'REMITTANCE_ACCESS_DENIED', 'Only participants or Admin may inspect this remittance through the application.')
+    return jsonify(item)
+
+
+def history_items(limit, offset, deployment, audit=False):
+    condition = '' if audit else ' AND (sender_wallet=? OR recipient_wallet=?)'
+    parameters = [11155111,deployment] + ([] if audit else [g.wallet,g.wallet]) + [limit,offset]
+    rows = get_db().execute('SELECT * FROM indexed_transactions WHERE chain_id=? AND deployment_id=?'+condition+' ORDER BY block_number DESC,tx_hash LIMIT ? OFFSET ?', parameters).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        events = get_db().execute('SELECT log_index,event_type,remittance_id,payload_json,block_hash FROM indexed_events WHERE chain_id=? AND deployment_id=? AND tx_hash=? ORDER BY log_index', (11155111,deployment,row['tx_hash'])).fetchall()
+        item['events'] = [dict(event) for event in events]
+        result.append(item)
+    return result
 
 
 @api.get('/transactions')
@@ -248,15 +297,17 @@ def transactions():
     limit, offset = pagination()
     config = current_app.config
     deployment = config['BLOCKCHAIN_DEPLOYMENT_ID']
-    items = []
-    # Cache may legitimately exist independently of live RPC; never present it as confirmed live state.
-    if deployment and str(config['BLOCKCHAIN_CHAIN_ID']) == '11155111':
-        rows = get_db().execute('SELECT * FROM indexed_transactions WHERE chain_id=? AND deployment_id=? AND (sender_wallet=? OR recipient_wallet=?) ORDER BY observed_at DESC,tx_hash LIMIT ? OFFSET ?',
-                               (11155111, deployment, g.wallet, g.wallet, limit, offset)).fetchall()
-        items = [dict(row) for row in rows]
-    return jsonify(source='sqlite_index', authoritative=False, live_blockchain_checked=False,
+    checked, progress, error = False, None, None
+    try:
+        reader = get_reader()
+        progress = index_events(reader)
+        checked = True
+    except BlockchainError as failure:
+        error = {'code': failure.code, 'message': failure.message}
+    items = history_items(limit,offset,deployment) if deployment and str(config['BLOCKCHAIN_CHAIN_ID']) == '11155111' else []
+    return jsonify(source='sqlite_index', authoritative=False, live_blockchain_checked=checked,
                    scope='authenticated_wallet', deployment_id=deployment or None,
-                   indexing_available=False, limit=limit, offset=offset, items=items)
+                   indexing_available=checked, indexing=progress, live_error=error, limit=limit, offset=offset, items=items)
 
 
 @api.get('/transactions/<tx_hash>/receipt')
@@ -264,11 +315,50 @@ def transactions():
 def receipt(tx_hash):
     if not re.fullmatch('0x[0-9a-fA-F]{64}', tx_hash):
         raise APIError(400, 'INVALID_TRANSACTION_HASH', 'A 32-byte transaction hash is required.')
-    blockchain_unavailable()
+    reader = get_reader()
+    result = reader.receipt(tx_hash)
+    if result.get('from'):
+        # Batched wallets may submit through a wrapper/relayer. Only events decoded
+        # from verified deployment contracts can establish participant association.
+        participant_fields = {
+            'FundsDeposited': ('sender',), 'FundsWithdrawn': ('owner',),
+            'FundsReserved': ('sender', 'recipient'),
+            'ReservedFundsReleased': ('sender', 'recipient'),
+            'ReservedFundsUnlocked': ('sender',),
+            'RemittanceCreated': ('sender', 'recipient'),
+            'RemittanceClaimed': ('sender', 'recipient'),
+            'RemittanceCancelled': ('sender', 'recipient'),
+            'RoleAuthorized': ('admin', 'wallet'), 'RoleRevoked': ('admin', 'wallet'),
+            'SystemPaused': ('admin',), 'SystemUnpaused': ('admin',),
+        }
+        logs = result.get('deployment_logs', [])
+        participant = any(
+            str(log.get('args', {}).get(field, '')).lower() == g.wallet
+            for log in logs for field in participant_fields.get(log.get('event'), ())
+        )
+        deployment_related = bool(logs) or str(result.get('to', '')).lower() in {
+            c.address.lower() for c in reader.contracts.values()
+        }
+        wallet_related = str(result['from']).lower() == g.wallet or participant
+        if not deployment_related or (not wallet_related and not reader.user(g.wallet)['admin']):
+            raise APIError(403, 'TRANSACTION_ACCESS_DENIED', 'Receipt is not for this wallet/deployment.')
+    return jsonify(result)
 
 
 @api.get('/transactions/audit')
 @authenticated
 def audit():
-    # Never infer an Admin role from local records or the Flask session.
-    blockchain_unavailable()
+    limit, offset = pagination()
+    reader = get_reader()
+    if not reader.user(g.wallet)['admin']:
+        raise APIError(403, 'ADMIN_REQUIRED', 'The verified on-chain Admin is required.')
+    progress = index_events(reader)
+    return jsonify(items=history_items(limit,offset,reader.manifest['deploymentId'],True), source='sqlite_index', authoritative=False, live_blockchain_checked=True, indexing=progress)
+
+
+@api.post('/transactions/prepare')
+@authenticated
+def prepare_transaction():
+    csrf_check()
+    value = body(('action', 'arguments'))
+    return jsonify(prepare(get_reader(), g.wallet, value['action'], value['arguments'], wallet))

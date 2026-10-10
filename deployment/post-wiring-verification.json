@@ -1,0 +1,65 @@
+{
+  "phase": "post-wiring",
+  "verified": {
+    "configured": true,
+    "deployment_verified": true,
+    "reader_available": true,
+    "wired": true,
+    "paused": false,
+    "chain_id": 11155111,
+    "deployment_id": "sc6113-sepolia-11884239",
+    "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+    "addresses": {
+      "RoleRegistry": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+      "deposit_money": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+      "paynow": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+    },
+    "block_number": 11884361,
+    "block_hash": "0x790e779788b526af8d1457a64d161b60aaaad7f49a11314aa39556e9bb7498b2",
+    "remittance_count": "0"
+  },
+  "deployment_evidence": {
+    "RoleRegistry": {
+      "address": "0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678",
+      "transactionHash": "0x569254964b6cb061f0f8582651886c808f67fcaa9fe3f971985f30a6c14ea062",
+      "blockNumber": 11884239,
+      "explorerUrl": "https://sepolia.etherscan.io/address/0x8E7A8Abf90cD4363F82489D14485Df7ACcaE4678"
+    },
+    "deposit_money": {
+      "address": "0x630863E58375Db128EFEfA51Ee369141cCbb839A",
+      "transactionHash": "0x0a821bab3526a05d40b85ad7d88d0ba39b8524db61fa4eb793af8fc8c8b0a944",
+      "blockNumber": 11884271,
+      "explorerUrl": "https://sepolia.etherscan.io/address/0x630863E58375Db128EFEfA51Ee369141cCbb839A"
+    },
+    "paynow": {
+      "address": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8",
+      "transactionHash": "0x4b6954a4e05fb70e9313e414d8044545ba5a14d6311e35daaaaf427313d67544",
+      "blockNumber": 11884290,
+      "explorerUrl": "https://sepolia.etherscan.io/address/0xA2Ee37DD717a8758Eb864788456d047b296C00E8"
+    }
+  },
+  "wiring_receipt": {
+    "transaction_hash": "0xa2b051bc68857ee471c8bf22d127907e903d69e79b70c40ec3426201b98a54c4",
+    "status": "CONFIRMED",
+    "from": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd",
+    "to": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+    "block_number": 11884306,
+    "block_hash": "0x294c450e858d0d680b0c9985c6d50ed8666cdf4ed82a7a80d9e8967f9f21fdbf",
+    "confirmations": 56,
+    "canonical": true,
+    "source": "verified_rpc",
+    "deployment_logs": [
+      {
+        "contract": "deposit_money",
+        "event": "RemittanceContractConfigured",
+        "args": {
+          "remittanceContract": "0xA2Ee37DD717a8758Eb864788456d047b296C00E8",
+          "admin": "0x4A779fA7d5eA106f1aDFB8369e65fCAA465ca7Fd"
+        },
+        "log_index": 388
+      }
+    ]
+  },
+  "wiring_call_path": "wallet batch; verified funding event",
+  "repeat_wiring_simulation": "reverted: Already configured"
+}
