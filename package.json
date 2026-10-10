@@ -1,0 +1,14 @@
+{
+  "name": "sc6113-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "compile:contracts": "node scripts/compile-contracts.cjs",
+    "sanity:contracts": "node scripts/sanity-contracts.cjs"
+  },
+  "devDependencies": {
+    "solc": "0.8.34",
+    "ethers": "6.16.0",
+    "ganache": "7.9.2"
+  }
+}

@@ -1,0 +1,3 @@
+# Solidity compile / isolated local sanity tooling
+node_modules/
+build/contracts/
