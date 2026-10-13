@@ -396,3 +396,171 @@ If a later transaction test is desired it requires a separate owner-signed check
 No Render deployment, Sepolia write, Solidity/deployment/config/schema change, main
 merge or Iteration 10 work occurred during this correction. Hosted performance and
 the overall remediation freeze remain pending.
+
+## Second performance correction — owner-observed hosted checkpoint
+
+The owner deployed first correction `bd571500c73690bd2a58a991d49fded4bb025ac9`,
+Render deployment `dep-db726959fdbs73epce10`, reported **LIVE** without config/env/address
+or contract changes. This is owner-supplied hosted evidence, not a new Work deployment.
+On 13 October 2026 (SGT), successful auth completed 20:29:40.400; account completed
+20:29:49.957; balances 20:29:55.931; remittances 20:30:13.639; Activity 20:30:26.147.
+The resulting 45.747-second span improved approximately 20% over the previous
+57–58-second observation but remained unacceptable. These are successive completion
+times, not instrumentation isolating every request's execution duration.
+
+Transfer page session was observed at 20:32:07.420; recipient roles completed at
+20:32:23.419 (~16 seconds). Preparation completed 20:32:34.669 (~11.25 seconds after
+the role response); perceived Create-to-wallet-UI wait was ~15 seconds. The owner
+**rejected** the MetaMask request. No Sepolia transaction resulted. The role request
+was outside the 60-second cache window, while preparation was warm. Extending TTL alone
+therefore cannot address the remaining warm bottleneck. U9-01/03/04 and U9-05 correctness
+remain hosted PASS; specific Smart Account success and warning friction remain as
+recorded above. U9-05 performance still requires hosted re-verification.
+
+### Remaining warm-path profile
+
+Before this second correction, a warm constructor performed a head read, initial hash,
+chain ID, three runtime-code reads, four historical/verification-anchor reads, pause,
+count and final snapshot hash. Endpoint checks then added their own pinned state and
+final hash. No full static proof reran, but substantial partial static proof did.
+
+The controlled 11-remittance fixture separates the operations below. Columns A–E are
+logical RPC messages, not HTTP batch round trips. Chain ID is retained as a current
+network-identity safeguard; it is not part of the reused historical proof.
+
+| Warm endpoint | A: static runtime/anchors before → after | B: current head/chain/hash before → after | C: pause/count | D: endpoint reads | E: history |
+|---|---:|---:|---:|---|---|
+| Account | 7 → 0 | 5 → 5 | 2 | 2 wallet-role calls | 0 |
+| Balances | 7 → 0 | 5 → 5 | 2 | 2 balance calls | 0 |
+| Recipient roles | 7 → 0 | 5 → 5 | 2 | 2 role calls | 0 |
+| Remittances | 7 → 0 | 5 → 5 | 2 | 22 transaction/reservation calls | 0 |
+| Activity | 7 → 0 | 4 → 4 | 2 | 0 | 10 messages: 3 log requests, 7 deliberate reconciliation/block checks |
+| Prepare create | 7 → 0 | 6 → 5 | 2 | 2 owner roles, recipient role, available funds, simulation, gas estimate | 0 |
+
+An index with actual logs additionally reads deduplicated transaction receipts,
+transactions and log blocks. Those evidence/reorg checks are intentionally unchanged.
+Provider/Web3 middleware can add other messages outside this controlled reader fixture.
+
+### Second-pass implementation and trust boundary
+
+The existing **60-second, non-sliding, content/config-keyed static context** now reuses
+runtime, historical receipts/transactions/anchors and proven immutable wiring without
+re-fetching them on each warm request. TTL was not increased. Full original proof
+runs on expiry, restart/clear or identity/content change, fails closed on error, and
+also compares previously verified exact runtime bytes during same-identity expiry
+revalidation. A wired context is required; unwired relationships remain uncached.
+
+Fresh per-request readers still obtain head/hash, chain ID, pause/count, wallet roles,
+financial state, receipt canonicality/confirmations and transaction post-state. Fresh
+chain ID remains a low-cost check against a changed/wrong-network RPC. No wallet or
+financial state is placed in the process-wide cache. Dynamic getter reuse is scoped
+strictly to one reader's pinned block and exact contract/function/argument tuple.
+
+**Explicit bounded trade-off:** a change/reorg affecting old deployment evidence is
+not re-queried on every warm endpoint. It is detected on bounded full revalidation;
+current snapshot/receipt reorg checks remain fresh. This assumes the frozen exact
+non-upgradeable runtime and stable configured Sepolia RPC within the cache interval.
+It is a coursework performance policy, not an instantaneous historical-reorg detector,
+a stronger RPC trust model or production financial assurance. Warm dynamic failures
+still return unavailable state rather than stale financial results.
+
+Independent contract reads use the installed Web3 **7.14.0** batch API. Its HTTP batch
+transport is narrowly subclassed to require exact request/response ID correspondence,
+unique IDs, expected count and successful JSON-RPC results before ABI decoding.
+Reordered valid responses are mapped deterministically. Missing/duplicate/unknown IDs,
+RPC errors, timeout or malformed ABI reject the batch without populating partial getter
+cache. No browser-supplied financial data is used. Every eth_call has the same explicit
+block number; a final current-block hash fence must pass before results escape.
+
+Remittances prefetch at most **10 IDs / 20 eth_calls** per transport batch, newest-first,
+then preserve participant/Admin filtering and pagination. A last batch may read a few
+extra records before the requested page is filled; the bound remains ten. Single-item
+transaction/reservation pairs, role pairs and balance pairs also batch. Available funds
+and recipient authorization are batched during create preparation; owner role checks,
+pause, exact unsigned from/to/data/value, simulation and gas estimation remain required.
+Preparation uses one final pinned-snapshot fence rather than an extra intermediate fence.
+No state from a previous HTTP request is reused for preparation.
+
+Activity remains separately indexed, bounded, resumable and non-authoritative. Its
+receipt/event verification, chunk reconciliation fences and checkpoint semantics were
+not modified. No aggregate dashboard endpoint or concurrent-request frontend was added:
+batching materially reduces the existing paths without new API/UI coupling. The current
+sequential routes and cross-page presentation-cache semantics remain intact. Check
+Inputs still waits for authoritative recipient permissions and cannot enable unsafe
+submission merely on syntax validation.
+
+### Controlled before/after results against bd57150
+
+Artifacts: `results/iteration9_warm_performance.csv` and `.md`; reproduce with
+`python scripts/profile-warm-reads.py --rpc-delay-ms 5`.
+The offline fixture uses 11 records and an empty-event backfill. Transport grouping
+and a 5 ms round-trip delay are **emulated**, with actual Web3 ABI/strict batch behavior
+and real local-EVM HTTP integration tested separately. Counts exclude hosted HTTP/auth,
+Turso transport, provider computation and middleware-specific additional calls. Cold
+means full proof; warm excludes one priming proof. No public RPC or write is used.
+
+| Endpoint | Cold messages / trips before → after | Warm messages before → after | Warm trips before → after | Warm ms before → after |
+|---|---|---:|---:|---:|
+| Account | 26/26 → 26/25 | 16 → 9 | 16 → 7 | 83.01 → 37.19 |
+| Balances | 26/26 → 26/25 | 16 → 9 | 16 → 7 | 84.23 → 39.75 |
+| Recipient roles | 26/26 → 26/25 | 16 → 9 | 16 → 7 | 83.56 → 37.37 |
+| Remittances | 46/46 → 46/26 | 36 → 29 | 36 → 8 | 186.99 → 42.54 |
+| Activity | 33/33 → 33/33 | 23 → 16 | 23 → 15 | 122.90 → 80.44 |
+| Prepare create | 31/31 → 30/28 | 21 → 13 | 21 → 10 | 110.23 → 53.53 |
+
+Complete sequential dashboard fixture (cold account, warm balances/remittances/Activity):
+**99 → 80 logical messages; 99 → 55 transport round trips; 528.05 → 299.39 ms** (~43%
+controlled latency reduction). Both versions execute one complete static proof in this
+sequence; standalone warm operations execute zero and standalone cold operations one.
+Warm runtime-code reads fell 3 → 0; old deployment/verification-anchor reads 4 → 0.
+Warm roles improved ~55%, remittances ~77% and preparation ~51% in this transport-delay
+fixture. These values do **not** predict hosted times. Cold Check Inputs can still pay
+full verification after expiry; historical index processing and actual RPC latency remain.
+
+### Second-pass regression and scope
+
+| Check | Result |
+|---|---|
+| Solidity 0.8.34 | 3 frozen contracts compile; zero warnings |
+| Contract sanity | 10 groups / 50 expected rejections PASS |
+| I7 characterization | 8 assertions PASS; accepted Low role limitation unchanged |
+| Comprehensive contract/security evaluation | 71 scenarios, 61 expected rejections, 952 assertions, 48 model transitions PASS |
+| Generic-wrapper characterization | 4 checks PASS |
+| Python/backend | 192 tests PASS |
+| Browser/frontend | 64 tests PASS; one-confirmation/account-switch/verified-ID/retry/navigation/responsive behavior retained |
+| SQLite and libSQL local-chain HTTP | Each 14 assertions / 12 canonical indexed events; repeat unchanged PASS |
+| Dependency, syntax, whitespace, frozen scope | PASS; no requirements/schema/source/config/manifest/I9 evidence change |
+
+New regressions cover zero warm runtime/anchor calls, successful TTL full proof, actual
+Web3 batch ordering/pinning/getter deduplication, missing/duplicate/unknown IDs, errored
+or malformed results, timeout, bounded 20-call remittance batch, wallet-role isolation
+and structured batch-failure 503 on SQLite/libSQL API paths. Prior tests retain fresh
+roles/pause/balances/count/remittances, failed TTL revalidation, identity/build/source
+changes, cache reset/single-flight, snapshot reorg rejection, fresh receipt confirmations,
+dynamic prepare authorization and one-confirmation/retry/ID rules. The two previous
+per-request historical/runtime revalidation tests now check expiry revalidation, matching
+the intentionally changed bounded static trust policy. No deployment verification was
+removed from cold proof. Ganache uses its JS fallback for the unavailable native µWS
+binary in this Node runtime; all checks pass.
+
+Changed implementation files are `backend/blockchain.py`, `backend/api.py` and
+`backend/preparation.py`; other changes are tests, profiling results/utility and this
+remediation record. Frozen participant evidence, Solidity, contract addresses, deployment
+manifest, schema, runtime DB, dependencies, environment/config and secrets are unchanged.
+No Render deployment, Sepolia transaction, main merge or Iteration 10 work occurred.
+
+### Next hosted read-only re-verification
+
+After owner review and separately authorized exact-commit deployment, confirm LIVE,
+startup and verified deployment without configuration changes. Time cold and warm
+account/balance/recipient/remittance/activity reads and unsigned preparation separately;
+the owner can reject the wallet prompt with no transaction. Verify the configured RPC
+accepts standard JSON-RPC batches: unsupported/rejected batches fail safely, and no
+hosted compatibility claim is made before this check. Check full verification after
+expiry, fresh roles/balances/pause, snapshot consistency and ordinary navigation reuse.
+Do not require new Sepolia writes just to measure performance. Do not bypass Smart
+Account warnings. The bounded static interval, per-worker cold costs, sync request
+ordering, low-volume O(n) scanning and public-RPC failures remain limitations.
+
+**SECOND PERFORMANCE CORRECTION LOCALLY VERIFIED — HOSTED RE-VERIFICATION REQUIRED**
+Overall remediation is not frozen yet.

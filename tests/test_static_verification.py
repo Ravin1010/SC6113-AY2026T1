@@ -61,6 +61,18 @@ class StaticVerificationTests(unittest.TestCase):
     def test_static_single_verification_and_distinct_dynamic_reader(self):
         a=self.reader();c=self.reader();self.assertIsNot(a,c);self.assertEqual(self.world.full,1)
         self.assertEqual(self.world.counter['get_transaction'],3);self.assertEqual(self.world.counter['get_transaction_receipt'],3)
+    def test_warm_context_has_no_runtime_or_historical_proof_rpc(self):
+        self.reader();self.world.counter.clear();self.reader()
+        self.assertEqual(self.world.counter['get_code'],0)
+        self.assertEqual(self.world.counter['get_transaction'],0)
+        self.assertEqual(self.world.counter['get_transaction_receipt'],0)
+        self.assertEqual(self.world.counter['get_block'],2)  # Current snapshot start/end only.
+        self.assertEqual(self.world.counter['chain_id'],1)
+    def test_ttl_success_repeats_full_static_proof(self):
+        with patch.object(b.time,'monotonic',return_value=0):self.reader()
+        with patch.object(b.time,'monotonic',return_value=61):self.reader()
+        self.assertEqual(self.world.full,2)
+        self.assertEqual(self.world.counter['get_code'],6)
     def test_dynamic_wallet_balance_pause_count_and_head_fresh(self):
         a=self.reader();self.world.head=21;self.world.values[('RoleRegistry','paused')]=True
         self.world.values[('paynow','remittanceCount')]=2;self.world.available[old.SENDER.lower()]=7
@@ -94,20 +106,24 @@ class StaticVerificationTests(unittest.TestCase):
             source.write_bytes((old.ROOT/'contracts/RoleRegistry.sol').read_bytes())
             build=root/'deployment/accepted-build.json';obj=json.loads(build.read_text());obj['compiler']='bad';build.write_text(json.dumps(obj))
             with self.assertRaises(b.BlockchainError):self.reader()
-    def test_runtime_identity_including_immutable_bytes_fresh(self):
-        reader=self.reader();addr=old.ADDRESSES['paynow'];code=bytearray(self.world.codes[addr])
+    def test_runtime_identity_including_immutable_bytes_revalidated_on_expiry(self):
+        with patch.object(b.time,'monotonic',return_value=0):reader=self.reader()
+        addr=old.ADDRESSES['paynow'];code=bytearray(self.world.codes[addr])
         references=reader.build['contracts']['paynow']['immutableReferences']
         start=next(iter(references.values()))[0]['start']
         code[start]^=1;self.world.codes[addr]=bytes(code)
-        with self.assertRaises(b.BlockchainError):self.reader()
+        with patch.object(b.time,'monotonic',return_value=61):
+            with self.assertRaises(b.BlockchainError):self.reader()
         self.assertFalse(b._static_contexts)
     def test_chain_change_rejected_on_cache_hit(self):
         self.reader();self.world.chain=1
         with self.assertRaises(b.BlockchainError):self.reader()
-    def test_historical_anchor_reorg_rejects_cached_evidence(self):
-        self.reader();actual=self.world.eth.get_block
+    def test_historical_anchor_reorg_rejects_on_expiry(self):
+        with patch.object(b.time,'monotonic',return_value=0):self.reader()
+        actual=self.world.eth.get_block
         self.world.eth.get_block=lambda n:{'hash':old.HASH(999)} if n==1 else actual(n)
-        with self.assertRaises(b.BlockchainError):self.reader()
+        with patch.object(b.time,'monotonic',return_value=61):
+            with self.assertRaises(b.BlockchainError):self.reader()
     def test_ttl_revalidation_failure_has_no_stale_fallback(self):
         with patch.object(b.time,'monotonic',return_value=0):self.reader()
         self.world.eth.get_transaction=lambda _:(_ for _ in ()).throw(RuntimeError('offline failure'))

@@ -118,3 +118,11 @@ class RemittanceDiscoveryTests(unittest.TestCase):
             response = client.get('/api/remittances')
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json['error']['code'], 'BLOCKCHAIN_READER_UNAVAILABLE')
+
+    def test_batch_rpc_failure_returns_structured_503(self):
+        client = self.client()
+        with patch('backend.api.get_reader', return_value=self.reader), patch.object(
+                self.reader, 'calls', side_effect=BlockchainError('BLOCKCHAIN_READER_UNAVAILABLE', 'Controlled batch failure')):
+            response = client.get('/api/remittances')
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json['error']['code'], 'BLOCKCHAIN_READER_UNAVAILABLE')

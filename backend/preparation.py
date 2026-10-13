@@ -14,6 +14,11 @@ def uint(value):
 
 
 def prepare(reader, owner, action, arguments, validate_wallet):
+    with reader.snapshot_batch():
+        return _prepare(reader, owner, action, arguments, validate_wallet)
+
+
+def _prepare(reader, owner, action, arguments, validate_wallet):
     def require(condition, message, code='ACTION_NOT_ALLOWED'):
         if not condition:
             raise BlockchainError(code, message, 409)
@@ -49,16 +54,21 @@ def prepare(reader, owner, action, arguments, validate_wallet):
             require(identity['sender'], 'Sender permission is required for new funding/remittances.')
         if action in ('deposit', 'withdraw', 'transfer'):
             amount = uint(arguments['amount_wei'])
+            if action == 'transfer':
+                target = checksum(validate_wallet(arguments['wallet']))
+                require(target.lower() != owner.lower(), 'Sender and recipient must differ.')
+                available, recipient = reader.calls([('deposit_money', 'availableBalance', (checksum(owner),)),
+                                                     ('RoleRegistry', 'isRecipient', (target,))])
+                require(amount <= available, 'Insufficient available balance.')
+                require(recipient, 'Recipient permission is required.')
             if action != 'deposit':
-                require(amount <= reader.call('deposit_money', 'availableBalance', checksum(owner)), 'Insufficient available balance.')
+                if action != 'transfer':
+                    require(amount <= reader.call('deposit_money', 'availableBalance', checksum(owner)), 'Insufficient available balance.')
             if action == 'deposit':
                 value = amount
             elif action == 'withdraw':
                 args.append(amount)
             else:
-                target = checksum(validate_wallet(arguments['wallet']))
-                require(target.lower() != owner.lower(), 'Sender and recipient must differ.')
-                require(reader.call('RoleRegistry', 'isRecipient', target), 'Recipient permission is required.')
                 args.extend((target, amount))
         else:
             identifier = uint(arguments['remittance_id'])

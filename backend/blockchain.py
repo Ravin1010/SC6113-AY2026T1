@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from flask import current_app, g
 from eth_utils import is_address
-from web3 import Web3
+from web3 import Web3, HTTPProvider
 from web3.exceptions import TransactionNotFound
 from web3._utils.events import get_event_data
 from eth_utils import event_abi_to_log_topic
@@ -21,6 +21,25 @@ FIELDS = ('BLOCKCHAIN_RPC_URL', 'BLOCKCHAIN_CHAIN_ID', 'ROLE_REGISTRY_ADDRESS',
 HISTORICAL_ADDRESSES = {'0x1b6fc422422447d20af3d26aed82ab79e5520f48', '0x91c798dec35104fd1610d38a84ae89f2b94f0351'}
 NAMES = ('RoleRegistry', 'deposit_money', 'paynow')
 ZERO = '0x'+'0'*40
+
+
+class VerifiedBatchProvider(HTTPProvider):
+    """Pinned Web3 7.14 batch transport with exact request/response ID validation."""
+    def make_batch_request(self, batch_requests):
+        payload = self.encode_batch_rpc_request(batch_requests)
+        expected = [item['id'] for item in json.loads(payload)]
+        raw = self._request_session_manager.make_post_request(
+            self.endpoint_uri, payload, **self.get_request_kwargs())
+        responses = self.decode_rpc_response(raw)
+        if (not isinstance(responses, list) or len(responses) != len(expected)
+                or any(not isinstance(item, dict) or type(item.get('id')) is not int
+                       or item.get('jsonrpc') != '2.0' or 'error' in item
+                       or not isinstance(item.get('result'), str) for item in responses)):
+            raise BlockchainError('BLOCKCHAIN_READER_UNAVAILABLE', 'Pinned batch read failed; no partial financial state is returned.')
+        by_id = {item['id']: item for item in responses}
+        if len(by_id) != len(expected) or set(by_id) != set(expected):
+            raise BlockchainError('BLOCKCHAIN_READER_UNAVAILABLE', 'Batch response identifiers did not match the verified request.')
+        return [by_id[identifier] for identifier in expected]
 
 # Process-local verified STATIC evidence only. Never a reader or wallet snapshot.
 _STATIC_TTL_SECONDS = 60
@@ -115,7 +134,7 @@ class SepoliaReader:
             self._static_key = digest.hexdigest()
         except (OSError, ValueError):
             raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Deployment evidence/build could not be read.')
-        self.web3 = Web3(Web3.HTTPProvider(config['BLOCKCHAIN_RPC_URL'], request_kwargs={'timeout': 12}))
+        self.web3 = Web3(VerifiedBatchProvider(config['BLOCKCHAIN_RPC_URL'], request_kwargs={'timeout': 12}))
         self.block = self.web3.eth.block_number
         self.block_hash = hex_value(self.web3.eth.get_block(self.block)['hash'])
         # Single-flight full static verification; separate Web3/contracts/snapshot per request.
@@ -136,6 +155,8 @@ class SepoliaReader:
                     self._verify_cached_context(entry)
                 else:
                     self.verify()
+                    if entry and self._verified_codes != entry['codes']:
+                        raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Previously verified runtime identity changed on revalidation.')
                     # Unwired funding is not yet immutable: never cache that relationship.
                     if self.wired:
                         _static_contexts[self._static_key] = {
@@ -156,18 +177,10 @@ class SepoliaReader:
                 raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', message)
         require(self.web3.eth.chain_id == 11155111, 'RPC is not Sepolia.')
         require(entry['verification_block'] <= self.block, 'RPC snapshot predates verified wiring.')
-        # Exact previously verified bytes, including immutable spans, checked each request.
-        for name, contract in self.contracts.items():
-            require(bytes(self.web3.eth.get_code(contract.address, block_identifier=self.block)) == entry['codes'][name],
-                    'Runtime changed since verified deployment.')
-        anchors = dict(entry['anchors'])
-        anchors[entry['verification_block']] = entry['verification_hash']
-        for number, block_hash in anchors.items():
-            require(hex_value(self.web3.eth.get_block(number)['hash']) == block_hash,
-                    'Cached deployment/wiring evidence reorganized.')
+        # Runtime/deployment history/wiring are immutable evidence, revalidated at TTL.
+        # Fresh chain identity, current snapshot, financial state and receipts stay live.
         self.admin, self.starts, self.wired = entry['admin'], entry['starts'].copy(), True
-        self.paused = self.call('RoleRegistry', 'paused')
-        self.count = self.call('paynow', 'remittanceCount')
+        self.paused, self.count = self.calls([('RoleRegistry', 'paused', ()), ('paynow', 'remittanceCount', ())])
         self.ensure_snapshot()
 
     @contextmanager
@@ -182,7 +195,30 @@ class SepoliaReader:
                 self.ensure_snapshot()
 
     def call(self, name, function, *args):
-        return getattr(self.contracts[name].functions, function)(*args).call(block_identifier=self.block)
+        key = (name, function, args)
+        cache = self.__dict__.setdefault('_calls', {})
+        if key not in cache:
+            cache[key] = getattr(self.contracts[name].functions, function)(*args).call(block_identifier=self.block)
+        return cache[key]
+
+    def calls(self, requests):
+        """Independent reads only, same request/block. No global dynamic-state cache."""
+        if not isinstance(getattr(self.web3, 'provider', None), VerifiedBatchProvider):
+            return [self.call(name, function, *args) for name, function, args in requests]
+        cache = self.__dict__.setdefault('_calls', {})
+        missing = list(dict.fromkeys(item for item in requests if item not in cache))
+        if missing:
+            try:
+                with self.web3.batch_requests() as batch:
+                    for name, function, args in missing:
+                        batch.add(getattr(self.contracts[name].functions, function)(*args).call(block_identifier=self.block))
+                    values = batch.execute()
+                if len(values) != len(missing):
+                    raise ValueError('incomplete batch')
+            except Exception:
+                raise BlockchainError('BLOCKCHAIN_READER_UNAVAILABLE', 'Pinned contract batch unavailable; no partial state is returned.') from None
+            cache.update(zip(missing, values))
+        return [cache[item] for item in requests]
 
     def verify(self):
         def require(condition, message):
@@ -247,28 +283,39 @@ class SepoliaReader:
 
     def user(self, wallet):
         address = checksum(wallet)
-        result = {'available': True, 'source': 'verified_contract', 'sender': self.call('RoleRegistry', 'isSender', address),
-                'recipient': self.call('RoleRegistry', 'isRecipient', address), 'admin': self.admin.lower() == wallet.lower(),
+        sender, recipient = self.calls([('RoleRegistry', 'isSender', (address,)), ('RoleRegistry', 'isRecipient', (address,))])
+        result = {'available': True, 'source': 'verified_contract', 'sender': sender,
+                'recipient': recipient, 'admin': self.admin.lower() == wallet.lower(),
                 'paused': self.paused}
         self.ensure_snapshot()
         return result
 
     def balances(self, wallet):
+        available, reserved = self.calls([('deposit_money', 'availableBalance', (checksum(wallet),)),
+                                          ('deposit_money', 'reservedBalance', (checksum(wallet),))])
         result = {'source': 'verified_contract', 'authoritative': True, 'block_number': self.block,
-                'available': eth_amount(self.call('deposit_money', 'availableBalance', checksum(wallet))),
-                'reserved': eth_amount(self.call('deposit_money', 'reservedBalance', checksum(wallet))), 'deployment': self.state()}
+                'available': eth_amount(available), 'reserved': eth_amount(reserved), 'deployment': self.state()}
         self.ensure_snapshot()
         return result
 
     def remittance(self, identifier):
         if not 0 < identifier <= self.count:
             raise BlockchainError('REMITTANCE_NOT_FOUND', 'Remittance does not exist.', 404)
-        sender, recipient, amount, status = self.call('paynow', 'transaction', identifier)
-        reservation = self.call('deposit_money', 'reservations', identifier)
+        transaction, reservation = self.calls([('paynow', 'transaction', (identifier,)), ('deposit_money', 'reservations', (identifier,))])
+        sender, recipient, amount, status = transaction
         self.ensure_snapshot()
         return {'id': str(identifier), 'sender': sender, 'recipient': recipient, 'amount': eth_amount(amount),
                 'status': ('PENDING', 'COMPLETED', 'CANCELLED')[status], 'reservation_active': reservation[3],
                 'source': 'verified_contract', 'authoritative': True, 'block_number': self.block}
+
+    def remittances(self, identifiers):
+        """At most ten IDs / twenty eth_calls per transport batch."""
+        if len(identifiers) > 10 or any(not 0 < identifier <= self.count for identifier in identifiers):
+            raise BlockchainError('INVALID_REMITTANCE_ID', 'Invalid bounded remittance batch.', 400)
+        if isinstance(getattr(self.web3, 'provider', None), VerifiedBatchProvider):
+            self.calls([(name, function, (identifier,)) for identifier in identifiers
+                        for name, function in [('paynow', 'transaction'), ('deposit_money', 'reservations')]])
+        return (self.remittance(identifier) for identifier in identifiers)
 
     def receipt(self, tx_hash):
         try:
