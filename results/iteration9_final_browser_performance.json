@@ -1,0 +1,24 @@
+{
+  "baseline": "558fb854168a355f8373e60272ebe53c09e56c7c",
+  "method": "Controlled browser delays: balances/detail 150ms; role preview 400ms; list/history 600ms. No public chain. Receipt-to-visible starts at mocked confirmed response, excluding inclusion and initial polling.",
+  "rows": [
+    {
+      "implementation": "before",
+      "auth_to_primary_ready_ms": 1400,
+      "auth_to_activity_ready_ms": 1402,
+      "local_input_enable_ms": 740,
+      "eligibility_role_rpc": 1,
+      "receipt_to_visible_confirmed_ms": 1570,
+      "receipt_to_activity_ready_ms": 1364
+    },
+    {
+      "implementation": "after",
+      "auth_to_primary_ready_ms": 779,
+      "auth_to_activity_ready_ms": 1409,
+      "local_input_enable_ms": 7,
+      "eligibility_role_rpc": 0,
+      "receipt_to_visible_confirmed_ms": 360,
+      "receipt_to_activity_ready_ms": 923
+    }
+  ]
+}

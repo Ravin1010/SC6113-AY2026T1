@@ -11,6 +11,7 @@ export const toWei = value => {const [whole,decimal='']=value.trim().split('.');
 
 export function setupLive(getSession, onError, refresh) {
   let state=null, revision=0, sending=false, pending=null, verifying=false;
+  const terminalIds=new Set(); // Presentation only; backend prepare always rechecks.
   const pendingKey=(wallet,deployment)=>`sc6113-pending:${wallet.toLowerCase()}:${chain}:${deployment}`;
   function savePending(){try{sessionStorage.setItem(pendingKey(pending.wallet,pending.deployment),JSON.stringify(pending));}catch{}}
   function reportPending(message,retry=false){
@@ -33,9 +34,9 @@ export function setupLive(getSession, onError, refresh) {
     try{
       for(let count=0;count<20;count++){
         if(pending!==operation||getSession()!==session)return;
-        await new Promise(resolve=>setTimeout(resolve,1500));
+        if(count)await new Promise(resolve=>setTimeout(resolve,1000));
         let receipt;
-        try{receipt=await requestAPI(`/api/transactions/${operation.hash}/receipt`);}
+        try{receipt=await requestAPI(`/api/transactions/${operation.hash}/receipt?index=deferred`);}
         catch(error){
           reportPending('Transaction submitted. Verification temporarily unavailable; retrying/checking authoritative state.',true);
           if(error.code==='AUTH_REQUIRED')onError(error);
@@ -55,14 +56,16 @@ export function setupLive(getSession, onError, refresh) {
               const events=(receipt.deployment_logs||[]).filter(log=>log.contract==='paynow'&&log.event==='RemittanceCreated'&&log.args?.sender?.toLowerCase()===operation.wallet&&log.args?.recipient?.toLowerCase()===operation.args.wallet.toLowerCase()&&String(log.args.amount)===String(operation.args.amount_wei));
               if(events.length!==1||!/^[1-9][0-9]*$/.test(String(events[0].args.remittanceId)))throw new Error('Verified creation event unavailable.');
               const id=String(events[0].args.remittanceId);
-              const item=await lookup('/api/remittances/'+encodeURIComponent(id));
-              if(item.source!=='verified_contract'||item.authoritative!==true||item.sender.toLowerCase()!==operation.wallet||item.recipient.toLowerCase()!==operation.args.wallet.toLowerCase()||String(item.amount.wei)!==String(operation.args.amount_wei))throw new Error('Created remittance post-state unavailable.');
+              const item=await requestAPI('/api/remittances/'+encodeURIComponent(id));
+              if(item.source!=='verified_contract'||item.authoritative!==true||String(item.id)!==id||item.sender.toLowerCase()!==operation.wallet||item.recipient.toLowerCase()!==operation.args.wallet.toLowerCase()||String(item.amount.wei)!==String(operation.args.amount_wei)||!['PENDING','COMPLETED','CANCELLED'].includes(item.status)||item.reservation_active!==(item.status==='PENDING'))throw new Error('Created remittance post-state unavailable.');
               if(pending!==operation||getSession()!==session)return;
               reportPending(`Confirmed (${receipt.confirmations} ${receipt.confirmations===1?'confirmation':'confirmations'}). Transaction hash:`);
               const output=buttons().find(button=>button.dataset.blockchainAction==='transfer')?.closest('form')?.querySelector('.form-result');
               if(output){const heading=document.createElement('strong');heading.textContent=`Remittance created — ID #${id}`;output.prepend(heading,document.createElement('br'));}
             }else reportPending(`Confirmed (${receipt.confirmations} ${receipt.confirmations===1?'confirmation':'confirmations'}):`);
-            completePending();await evaluate();return;
+            completePending();await evaluate();
+            // Presentation/index work must never gate confirmed authoritative outcome.
+            void refresh({presentation:true,action:operation.action,hash:operation.hash}).catch(()=>{});return;
           }
         }
         reportPending(`Transaction submitted. Confirmation pending (${receipt.confirmations||0}/${confirmationsRequired}):`,true);
@@ -72,17 +75,9 @@ export function setupLive(getSession, onError, refresh) {
       if(pending===operation){reportPending('Transaction submitted. Verification temporarily unavailable; retrying/checking authoritative state.',true);if(error.code==='AUTH_REQUIRED')onError(error);}
     }finally{verifying=false;}
   }
-  const lookups=new Map();
-  function lookup(path){
-    const cached=lookups.get(path);
-    if(cached && cached.expires>Date.now())return cached.promise;
-    const entry={expires:Date.now()+30000};
-    entry.promise=viewRead(path,requestAPI).catch(error=>{if(lookups.get(path)===entry)lookups.delete(path);throw error;});
-    lookups.set(path,entry);return entry.promise;
-  }
   const buttons=()=>Array.from(document.querySelectorAll('[data-blockchain-action]'));
   const disable=()=>{buttons().forEach(button=>button.disabled=true);const audit=document.getElementById('audit-refresh');if(audit)audit.disabled=true;};
-  function invalidate(){lookups.clear();state=null;revision++;disable();text('audit-records','');text('available-balance','Unavailable');text('reserved-balance','Unavailable');text('live-remittances','Live remittance state unavailable.');}
+  function invalidate(){terminalIds.clear();state=null;revision++;disable();text('audit-records','');text('available-balance','Unavailable');text('reserved-balance','Unavailable');text('live-remittances','Live remittance state unavailable.');}
   function basic(){const session=getSession();return Boolean(state && session && state.deployment.deployment_verified===true && state.deployment.wired===true && state.connection.chainId===chain && state.connection.address.toLowerCase()===session.wallet.toLowerCase());}
   async function check(button,ticket) {
     button.disabled=true;
@@ -102,22 +97,13 @@ export function setupLive(getSession, onError, refresh) {
     if(['authorizeSender','authorizeRecipient','revokeRole','transfer'].includes(action)) {
       const target=form?.querySelector('[name="wallet"]');
       if(!target || validationMessage(action==='transfer'?'recipient':'address',target.value,getSession().wallet)) return;
-      const roles=await lookup('/api/users/roles/'+encodeURIComponent(target.value.trim().toLowerCase()));
-      if(roles.available!==true || roles.source!=='verified_contract') return;
-      if(action==='transfer') enabled=roles.recipient===true;
-      if(action==='authorizeSender') enabled=!roles.sender;
-      if(action==='authorizeRecipient') enabled=!roles.recipient;
-      if(action==='revokeRole') enabled=document.getElementById('ordinary-role').value==='sender'?roles.sender:roles.recipient;
     }
     if(action==='claim'||action==='cancel') {
       const id=form?.querySelector('[data-rule="id"]');
       if(!id || validationMessage('id',id.value)) return;
-      const item=await lookup('/api/remittances/'+encodeURIComponent(id.value.trim()));
-      if(ticket!==revision || !state || item.source!=='verified_contract'||item.authoritative!==true) return;
-      text('remittance-detail', `#${item.id}: ${item.status} · ${item.amount.test_eth} test ETH · ${item.sender} → ${item.recipient}`);
-      enabled=item.status==='PENDING' && item[action==='claim'?'recipient':'sender'].toLowerCase()===getSession().wallet.toLowerCase();
+      if(terminalIds.has(id.value.trim()))enabled=false;
     }
-    if(ticket===revision && basic() && !sending) button.disabled=!enabled;
+    if(ticket===revision && basic() && !sending){button.disabled=!enabled;button.title='Current on-chain permission and state are checked before MetaMask opens.';}
   }
   async function evaluate(){const ticket=++revision;disable();const audit=document.getElementById('audit-refresh');if(audit)audit.disabled=!(basic()&&state.roles.admin&&!sending);await Promise.all(buttons().map(async button=>{try{await check(button,ticket);}catch(error){if(ticket===revision && error.code==='AUTH_REQUIRED')onError(error);}}));}
   async function set(account,balances,connection,{list=true}={}){
@@ -139,7 +125,10 @@ export function setupLive(getSession, onError, refresh) {
     text('available-balance',`${balances.available.test_eth} test ETH (${balances.available.wei} wei)`);
     text('reserved-balance',`${balances.reserved.test_eth} test ETH (${balances.reserved.wei} wei)`);
     await evaluate();
-    if(list && document.getElementById('live-remittances')) {
+    if(list)await refreshList();
+  }
+  async function refreshList(){
+    if(state && document.getElementById('live-remittances')) {
       const ticket=revision;
       try{const data=await viewRead('/api/remittances?limit=20&offset=0',requestAPI);if(ticket!==revision||!state)return;
         if(data.source!=='verified_contract'||data.authoritative!==true)throw new Error('Remittance provenance unavailable.');
@@ -156,10 +145,17 @@ export function setupLive(getSession, onError, refresh) {
     // ID/role lookups are reevaluated against the new snapshot, including exits.
     await refresh({confirmed:true,action,args});
     if(getSession()===expected && ['claim','cancel'].includes(action)){
-      const item=await lookup('/api/remittances/'+encodeURIComponent(args.remittance_id));
-      if(item.source!=='verified_contract'||item.authoritative!==true||item.status!==(action==='claim'?'COMPLETED':'CANCELLED'))throw new Error('Authoritative remittance completion is not verified yet.');
+      const item=await requestAPI('/api/remittances/'+encodeURIComponent(args.remittance_id));
+      if(item.source!=='verified_contract'||item.authoritative!==true||String(item.id)!==String(args.remittance_id)||item.status!==(action==='claim'?'COMPLETED':'CANCELLED')||item.reservation_active!==false||item[action==='claim'?'recipient':'sender'].toLowerCase()!==expected.wallet.toLowerCase())throw new Error('Authoritative remittance completion is not verified yet.');
       text('remittance-detail',`#${item.id}: ${item.status} · ${item.amount.test_eth} test ETH · ${item.sender} → ${item.recipient}`);
+      terminalIds.add(String(item.id));
     }
+    if(getSession()===expected && ['authorizeSender','authorizeRecipient','revokeRole'].includes(action)){
+      const roles=await requestAPI('/api/users/roles/'+encodeURIComponent(args.wallet.toLowerCase()));
+      const role=action==='authorizeSender'?'sender':action==='authorizeRecipient'?'recipient':args.role===0?'sender':'recipient';
+      if(roles.available!==true||roles.source!=='verified_contract'||roles[role]!== (action!=='revokeRole'))throw new Error('Authoritative resulting role unavailable.');
+    }
+    if(getSession()===expected && ['pause','unpause'].includes(action) && state?.deployment.paused!==(action==='pause'))throw new Error('Authoritative resulting pause state unavailable.');
   }
   function argumentsFor(action,form){
     const args={};
@@ -177,6 +173,7 @@ export function setupLive(getSession, onError, refresh) {
     const args=argumentsFor(action,form);
     const report=value=>{if(output){output.textContent=value;if(submittedHash){const link=document.createElement('a');link.href=`https://sepolia.etherscan.io/tx/${submittedHash}`;link.target='_blank';link.rel='noopener';link.textContent='View Sepolia transaction';output.append(' ',link);}}};
     sending=true;disable();
+    report('Checking current on-chain permissions and state; preparing unsigned transaction…');
     try{
       const prepared=await postJSON('/api/transactions/prepare',{action,arguments:args},session.csrf_token);
       const tx=prepared.transaction;
@@ -199,7 +196,7 @@ export function setupLive(getSession, onError, refresh) {
   }
 
   buttons().forEach(button=>button.addEventListener('click',()=>submit(button)));
-  let timer;document.querySelectorAll('form[data-preview]').forEach(form=>form.addEventListener('input',()=>{revision++;disable();clearTimeout(timer);timer=setTimeout(evaluate,300);}));
+  document.querySelectorAll('form[data-preview]').forEach(form=>form.addEventListener('input',()=>{revision++;disable();void evaluate();}));
   document.getElementById('switch-sepolia')?.addEventListener('click',async()=>{try{await window.ethereum?.request({method:'wallet_switchEthereumChain',params:[{chainId:chain}]});if(state && state.connection.chainId!==chain)await refresh();}catch(error){onError(error);}});
   document.getElementById('audit-refresh')?.addEventListener('click',async()=>{
     if(!basic()||!state.roles.admin)return;
@@ -212,5 +209,5 @@ export function setupLive(getSession, onError, refresh) {
       if(!data.items.length)text('audit-records','No indexed audit transactions available yet.');
     }catch(error){if(ticket===revision){text('audit-records',friendlyError(error));if(error.code==='AUTH_REQUIRED')onError(error);}}
   });
-  return {set,invalidate,isSending:()=>sending};
+  return {set,invalidate,refreshList,isSending:()=>sending};
 }

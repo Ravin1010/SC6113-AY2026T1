@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 import test_blockchain as baseline
 from backend.database import get_db
+from history_helper import sync_history
 from backend.blockchain import BlockchainError
 
 
@@ -104,7 +105,7 @@ class RemittanceDiscoveryTests(unittest.TestCase):
         progress = {'caught_up': False}
         with patch('backend.api.get_reader', return_value=self.reader), patch(
                 'backend.api.index_events', return_value=progress) as index:
-            response = client.get('/api/transactions')
+            response = sync_history(client)
         index.assert_called_once_with(self.reader)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['indexing'], progress)

@@ -317,6 +317,20 @@ def transactions():
     limit, offset = pagination()
     config = current_app.config
     deployment = config['BLOCKCHAIN_DEPLOYMENT_ID']
+    items = history_items(limit, offset, deployment) if deployment and str(config['BLOCKCHAIN_CHAIN_ID']) == '11155111' else []
+    return jsonify(source='sqlite_index', authoritative=False, live_blockchain_checked=False,
+                   reconciliation='not_checked', scope='authenticated_wallet', deployment_id=deployment or None,
+                   indexing_available=False, indexing=None, live_error=None, limit=limit, offset=offset, items=items)
+
+
+@api.post('/transactions/sync')
+@authenticated
+def sync_transactions():
+    csrf_check()
+    body(())
+    limit, offset = pagination()
+    config = current_app.config
+    deployment = config['BLOCKCHAIN_DEPLOYMENT_ID']
     checked, progress, error = False, None, None
     try:
         reader = get_reader()
@@ -333,9 +347,11 @@ def transactions():
 @api.get('/transactions/<tx_hash>/receipt')
 @authenticated
 def receipt(tx_hash):
+    if set(request.args)-{'index'} or len(request.args.getlist('index'))>1 or request.args.get('index') not in (None,'deferred'):
+        raise APIError(400, 'INVALID_QUERY', 'Only index=deferred is supported for receipt evidence.')
     if not re.fullmatch('0x[0-9a-fA-F]{64}', tx_hash):
         raise APIError(400, 'INVALID_TRANSACTION_HASH', 'A 32-byte transaction hash is required.')
-    reader = get_reader()
+    reader = get_reader(receipt_only=True)
     result = reader.receipt(tx_hash)
     if result.get('from'):
         # Batched wallets may submit through a wrapper/relayer. Only events decoded
@@ -360,13 +376,15 @@ def receipt(tx_hash):
             c.address.lower() for c in reader.contracts.values()
         }
         wallet_related = str(result['from']).lower() == g.wallet or participant
-        if not deployment_related or (not wallet_related and not reader.user(g.wallet)['admin']):
+        if not deployment_related or (not wallet_related and reader.admin.lower() != g.wallet):
             raise APIError(403, 'TRANSACTION_ACCESS_DENIED', 'Receipt is not for this wallet/deployment.')
     result['confirmations_required'] = max(1, int(current_app.config['BLOCKCHAIN_CONFIRMATIONS']))
     if result.get('status') in ('CONFIRMED', 'FAILED') and (
             result.get('canonical') is not True or result.get('confirmations', 0) < result['confirmations_required']):
         result['status'] = 'PENDING_VERIFICATION'
-    result['activity_indexed'] = index_receipt(reader, result)
+    deferred=request.args.get('index')=='deferred'
+    result['activity_indexed'] = False if deferred else index_receipt(reader, result)
+    result['activity_index_pending'] = deferred
     return jsonify(result)
 
 

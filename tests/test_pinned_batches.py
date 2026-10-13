@@ -32,6 +32,9 @@ class PinnedBatchTests(unittest.TestCase):
         def answer(item):
             if item['method'] == 'eth_chainId':
                 result = '0xaa36a7'
+            elif item['method'] == 'eth_estimateGas':
+                self.assertEqual(item['params'][1], '0x14')
+                result = '0xc350'
             else:
                 self.assertEqual(item['method'], 'eth_call')
                 self.assertEqual(item['params'][1], '0x14')
@@ -41,7 +44,7 @@ class PinnedBatchTests(unittest.TestCase):
                 name = function.fn_name
                 value = {'isSender': self.sender_role, 'isRecipient': True, 'availableBalance': 123,
                          'reservedBalance': 50, 'transaction': (SENDER, RECIPIENT, 7, 0),
-                         'reservations': (SENDER, RECIPIENT, 7, True)}[name]
+                         'reservations': (SENDER, RECIPIENT, 7, True), 'transfer': 7}[name]
                 types = [collapse_if_tuple(output) for output in function.abi['outputs']]
                 values = value if len(types) > 1 else (value,)
                 result = Web3.to_hex(self.web3.codec.encode(types, values))
@@ -94,4 +97,19 @@ class PinnedBatchTests(unittest.TestCase):
         self.sender_role = False
         self.reader._calls = {}  # Equivalent to a distinct fresh request reader.
         self.assertFalse(self.reader.user(RECIPIENT)['sender'])
+
+    def test_execution_simulation_and_gas_estimation_share_pinned_transport(self):
+        transaction={'from':SENDER,'to':ADDRESSES['paynow'],
+                     'data':self.reader.contracts['paynow'].encode_abi('transfer',args=[RECIPIENT,1]),'value':'0x0'}
+        self.assertEqual(self.reader.simulate(transaction),50000)
+        batches=[p for p in self.payloads if isinstance(p,list)]
+        self.assertEqual(len(batches),1)
+        self.assertEqual([p['method'] for p in batches[0]],['eth_call','eth_estimateGas'])
+        self.assertTrue(all(p['params'][1]=='0x14' for p in batches[0]))
+
+    def test_execution_batch_partial_response_fails_closed(self):
+        self.mode='missing'
+        transaction={'from':SENDER,'to':ADDRESSES['paynow'],
+                     'data':self.reader.contracts['paynow'].encode_abi('transfer',args=[RECIPIENT,1]),'value':'0x0'}
+        with self.assertRaises(b.BlockchainError):self.reader.simulate(transaction)
 

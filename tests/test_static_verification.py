@@ -73,6 +73,14 @@ class StaticVerificationTests(unittest.TestCase):
         with patch.object(b.time,'monotonic',return_value=61):self.reader()
         self.assertEqual(self.world.full,2)
         self.assertEqual(self.world.counter['get_code'],6)
+    def test_warm_receipt_reader_skips_pause_count_but_retains_snapshot(self):
+        self.reader();self.world.counter.clear()
+        reader=b.SepoliaReader(self.world.config,receipt_only=True)
+        self.assertEqual(self.world.counter['contract_call'],0)
+        self.assertEqual(self.world.counter['block_number'],1)
+        self.assertEqual(self.world.counter['chain_id'],1)
+        self.assertEqual(self.world.counter['get_block'],2)
+        self.assertFalse(hasattr(reader,'paused'));self.assertFalse(hasattr(reader,'count'))
     def test_dynamic_wallet_balance_pause_count_and_head_fresh(self):
         a=self.reader();self.world.head=21;self.world.values[('RoleRegistry','paused')]=True
         self.world.values[('paynow','remittanceCount')]=2;self.world.available[old.SENDER.lower()]=7

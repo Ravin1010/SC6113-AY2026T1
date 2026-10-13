@@ -111,8 +111,9 @@ def eth_amount(wei):
 
 
 class SepoliaReader:
-    def __init__(self, config):
+    def __init__(self, config, *, receipt_only=False):
         self.config = config
+        self.receipt_only = receipt_only
         path = config.get('BLOCKCHAIN_MANIFEST_PATH')
         if not path:
             raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Deployment evidence is not configured. Manual deployment and verification are required.')
@@ -180,7 +181,8 @@ class SepoliaReader:
         # Runtime/deployment history/wiring are immutable evidence, revalidated at TTL.
         # Fresh chain identity, current snapshot, financial state and receipts stay live.
         self.admin, self.starts, self.wired = entry['admin'], entry['starts'].copy(), True
-        self.paused, self.count = self.calls([('RoleRegistry', 'paused', ()), ('paynow', 'remittanceCount', ())])
+        if not self.receipt_only:
+            self.paused, self.count = self.calls([('RoleRegistry', 'paused', ()), ('paynow', 'remittanceCount', ())])
         self.ensure_snapshot()
 
     @contextmanager
@@ -219,6 +221,19 @@ class SepoliaReader:
                 raise BlockchainError('BLOCKCHAIN_READER_UNAVAILABLE', 'Pinned contract batch unavailable; no partial state is returned.') from None
             cache.update(zip(missing, values))
         return [cache[item] for item in requests]
+
+    def simulate(self, transaction):
+        """Retain both independent execution simulation and gas estimation."""
+        if isinstance(getattr(self.web3, 'provider', None), VerifiedBatchProvider):
+            with self.web3.batch_requests() as batch:
+                batch.add(self.web3.eth.call(transaction, block_identifier=self.block))
+                batch.add(self.web3.eth.estimate_gas(transaction, block_identifier=self.block))
+                values = batch.execute()
+            if len(values) != 2 or not isinstance(values[1], int) or values[1] <= 0:
+                raise BlockchainError('TRANSACTION_SIMULATION_FAILED', 'Incomplete simulation or gas estimate.', 409)
+            return values[1]
+        self.web3.eth.call(transaction, block_identifier=self.block)
+        return self.web3.eth.estimate_gas(transaction, block_identifier=self.block)
 
     def verify(self):
         def require(condition, message):
@@ -264,8 +279,9 @@ class SepoliaReader:
         trusted = self.call('deposit_money', 'remittanceContract')
         require(trusted in (ZERO, transfer), 'Funding is permanently wired to another address.')
         self.wired = trusted == transfer
-        self.paused = self.call('RoleRegistry', 'paused')
-        self.count = self.call('paynow', 'remittanceCount')
+        if not getattr(self, 'receipt_only', False):
+            self.paused = self.call('RoleRegistry', 'paused')
+            self.count = self.call('paynow', 'remittanceCount')
         require(self.block_hash == hex_value(self.web3.eth.get_block(self.block)['hash']), 'Chain changed during verification; retry.')
 
     def ensure_snapshot(self):
@@ -347,14 +363,14 @@ class SepoliaReader:
                 'source': 'verified_rpc', 'deployment_logs': logs}
 
 
-def get_reader():
+def get_reader(*, receipt_only=False):
     if 'blockchain_reader' in g:
         return g.blockchain_reader
     state = configuration_status()
     if not state['configured']:
         raise BlockchainError('BLOCKCHAIN_NOT_CONFIGURED', 'Verified evolved Sepolia deployment configuration is incomplete or invalid.')
     try:
-        reader = SepoliaReader(current_app.config)
+        reader = SepoliaReader(current_app.config, receipt_only=receipt_only)
     except BlockchainError:
         raise
     except (KeyError, TypeError, ValueError, OSError):

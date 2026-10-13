@@ -10,10 +10,25 @@ import test_blockchain as baseline
 import test_remittance_discovery as discovery
 from backend.database import get_db
 from backend.indexer import index_events
+from history_helper import sync_history
 from backend.blockchain import BlockchainError
 
 
 class ReceiptIndexTests(unittest.TestCase):
+    def test_deferred_receipt_retains_proof_without_activity_storage_dependency(self):
+        tx_hash,_=self.receipt();client=self.client()
+        with patch('backend.api.get_reader',return_value=self.reader),patch('backend.api.index_receipt',side_effect=AssertionError('Evidence write must be deferred')) as indexing:
+            result=client.get('/api/transactions/'+tx_hash+'/receipt?index=deferred')
+        indexing.assert_not_called()
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.json['status'],'CONFIRMED');self.assertTrue(result.json['canonical'])
+        self.assertTrue(result.json['deployment_logs']);self.assertFalse(result.json['activity_indexed'])
+        self.assertTrue(result.json['activity_index_pending'])
+        self.assertEqual(get_db().execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0],0)
+        self.assertTrue(self.verify(client,tx_hash).json['activity_indexed'])
+    def test_receipt_deferred_option_rejects_malformed_query(self):
+        tx_hash,_=self.receipt();client=self.client()
+        self.assertEqual(client.get('/api/transactions/'+tx_hash+'/receipt?index=unknown').status_code,400)
     setUp = baseline.BlockchainTests.setUp
     event = baseline.BlockchainTests.event
     client = discovery.RemittanceDiscoveryTests.client
@@ -124,7 +139,7 @@ class ReceiptIndexTests(unittest.TestCase):
         self.verify(client, tx_hash)
         with patch('backend.api.get_reader', return_value=self.reader), patch(
                 'backend.api.index_events', side_effect=BlockchainError('BLOCKCHAIN_READER_UNAVAILABLE', 'History RPC slow')):
-            response = client.get('/api/transactions')
+            response = sync_history(client)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['items'][0]['tx_hash'], tx_hash)
         self.assertFalse(response.json['authoritative'])

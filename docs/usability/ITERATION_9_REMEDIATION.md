@@ -564,3 +564,285 @@ ordering, low-volume O(n) scanning and public-RPC failures remain limitations.
 
 **SECOND PERFORMANCE CORRECTION LOCALLY VERIFIED — HOSTED RE-VERIFICATION REQUIRED**
 Overall remediation is not frozen yet.
+
+## Final performance/presentation correction
+
+### Latest hosted checkpoint — owner observations
+
+The owner reports Render checked out exact second-correction commit
+`558fb854168a355f8373e60272ebe53c09e56c7c`. No environment/address/contract changes were
+reported. This section records supplied observations, not a new Work deployment or
+independent inspection of production transaction payloads.
+
+On 13 October 2026 (SGT): auth succeeded 22:45:03.553; account completed 22:45:11.957
+(~8.4 s); balances 22:45:14.646 (+2.7 s); remittances 22:45:17.564 (+2.9 s); Activity
+22:45:27.214 (+9.7 s). Full dashboard span was ~23.7 s, versus ~57–58 s originally
+and ~45.7 s after the first correction. Activity was now the largest blocking component.
+These successive completion timestamps are not isolated endpoint execution durations.
+
+Owner-observed Check Inputs to available transaction button was ~10 seconds. Recipient
+roles completed 22:46:20.136; preparation completed 22:46:26.153 (a ~6.0 s
+completion-to-completion gap). The owner perceived ~15 s from action click to MetaMask
+across transaction types; the browser click/start timestamp is unavailable, so this
+must not be labelled a 15-second backend prepare duration.
+
+Owner-observed end-to-end confirmation was ~20 s. Preparation completion to a later
+remittance read at 22:46:44.573 spans ~18.4 s. It includes unknown wallet approval,
+inclusion, receipt-check and post-state components; it is **not pure mining time**.
+No new hash, block or remittance ID was supplied for this latest timing observation;
+none is invented here. Earlier #10/#11 hosted evidence remains unchanged above.
+
+### Confirmed code-path diagnosis
+
+The accepted implementation awaited `refreshAffected` from `verifyPending`, which
+awaited the financial/role refresh, `live.set` (including the full list where present)
+and `loadHistory`. Only afterward did creation obtain its exact event-derived ID detail
+and report Confirmed. This unnecessarily made non-authoritative history/index catch-up
+and unrelated list presentation part of the financial confirmation critical path.
+
+Remote frontend eligibility was duplicated for **six** action types: target-role
+lookups for authorize Sender/Recipient, revoke and transfer; remittance-detail lookups
+for claim/cancel. Deposit, withdraw and pause/unpause already used local loaded-state
+checks. Backend preparation independently enforced current conditions for every action.
+Additional preparation cost included owner Sender/Recipient reads even for immutable
+Admin and post-revocation exit rights that do not require those ordinary roles.
+
+### Cached Activity and explicit reconciliation
+
+`GET /api/transactions` now reads existing wallet-scoped application index rows only.
+It performs **zero blockchain RPC** and returns `authoritative: false`,
+`live_blockchain_checked: false`, `reconciliation: not_checked` and no fabricated live
+progress. Cached evidence may lag or contain unreconciled historical entries; the UI
+states that the live chain was not checked and never treats this as financial truth.
+
+`POST /api/transactions/sync` with an empty JSON body and session CSRF token retains
+bounded `index_events` reconciliation and returns the scoped history/progress/error
+response. The existing chunk budgets, canonical/reorg fences, per-pass RPC deduplication,
+atomic checkpoint rules, participant filtering and database schema are unchanged.
+The new **Reconcile Activity with Sepolia** control explicitly requests this work.
+No worker, scheduler, blanket polling or automatic historical catch-up is introduced.
+Admin audit remains a separately requested, verified-role bounded reconciliation path.
+
+Initial cached Activity loading is asynchronous after the primary view is ready.
+A history/sync error updates its own section and cannot clear correct balances or
+remittance data. Actual auth expiration still invalidates the application session.
+Receipt fast-path evidence and historical reconciliation remain independent.
+
+### Progressive cold first-load presentation
+
+Existing account/balance/remittance APIs and compatibility routes are retained; no
+aggregate endpoint is added. Removing the large history dependency and using progressive
+presentation is the smaller correction without new cross-section API/UI coupling.
+Authentication success is shown immediately, followed by deployment/role verification,
+authoritative balances and remittances. Primary readiness is based on those reads;
+Activity loads separately. Each financial API retains its own pinned/canonical snapshot,
+not an asserted atomic snapshot across all three HTTP requests.
+
+Cross-page presentation caching and selective invalidation remain unchanged. Ordinary
+navigation, clicks, focus/visibility and tab changes do not introduce full reloads.
+The explicit financial Refresh remains available for other-wallet/external changes;
+Activity's explicit reconciliation control identifies when live history was checked.
+
+### Local input eligibility and authoritative prepare
+
+All ten actions now use local syntax/semantic validation and already-loaded wallet,
+network/deployment/role/pause presentation state for button availability. Local evaluation
+is immediate, with no remote-role/detail wait or debounce timer. Check Inputs explains
+that current permissions, balances and status are checked on the action click before
+MetaMask opens. Neither a clickable button nor cached UI values authorize a transaction.
+
+Backend preparation remains the final authenticated/CSRF-protected gate: exact arguments,
+positive amounts/IDs, wiring/deployment, current pause, Sender for new funding/remittances,
+recipient role, available funds, remittance existence/status and original participant,
+unsigned from/to/data/value, execution simulation and gas estimation. Invalid current
+state returns an error and **no MetaMask transaction request occurs**. Account-switch
+and pending-hash locks remain intact.
+
+Preparation no longer queries irrelevant ordinary roles: immutable Admin identity
+controls the five admin actions; withdrawal is balance-owner restricted; claim/cancel
+use recorded participant rights that survive revocation. Deposit checks Sender; transfer
+batches Sender, recipient and available balance at one fresh block. This preserves all
+frozen requirements rather than skipping authorization. Both `eth_call` simulation and
+`eth_estimateGas` are retained and submitted in one strictly validated, same-block JSON-RPC
+batch. Partial/malformed/error batches fail closed. The final snapshot fence is retained.
+
+### Minimum authoritative confirmation and separate presentation
+
+Every successful action still requires the canonical verified receipt, >=1 confirmation,
+success status and the checks below. Until essential verification completes or definitively
+fails, the original wallet/hash stays locked and retry is verification-only.
+
+| Action | Minimum refreshed authoritative state before Confirmed |
+|---|---|
+| deposit | Fresh verified available/reserved balance response |
+| withdraw | Fresh verified available/reserved balance response |
+| transfer/create | Exactly matching decoded RemittanceCreated event, event-derived ID, direct ID/parties/amount/state/reservation match and fresh balances |
+| claim | Exact ID COMPLETED, reservation inactive, designated recipient and fresh balances |
+| cancel | Exact ID CANCELLED, reservation inactive, original sender and fresh balances |
+| authorizeSender | Exact target Sender permission true from verified contracts |
+| authorizeRecipient | Exact target Recipient permission true from verified contracts |
+| revokeRole | Exact requested ordinary permission false from verified contracts |
+| pause | Current verified pause true |
+| unpause | Current verified pause false |
+
+For create, a remittance already completed/cancelled by subsequent valid actions is
+acceptable only with matching permanent parties/amount/ID and consistent inactive
+reservation; no ID is guessed from count. A terminal post-state observed after own
+claim/cancel may disable that ID's buttons locally; backend prepare still rechecks.
+
+The UI polls `/api/transactions/<hash>/receipt?index=deferred`, which retains complete
+receipt/deployment/event/participant/canonicality verification but does not depend on
+Activity storage. After minimum post-state passes it displays Confirmed and the created
+ID where applicable. Only then does a separate normal receipt read reverify and invoke
+the existing atomic/idempotent evidence fast path, followed by presentation-only list
+and cached Activity updates. The default receipt API remains compatible and retains
+its original evidence upsert. No browser-supplied event data is trusted; historical
+checkpoints are not advanced by isolated receipt processing.
+
+Deferred indexing, bounded sync and canonical receipts have dedicated regressions.
+Evidence storage failure cannot convert an already confirmed financial result into
+an apparent failure. It is reported in Activity. This entails a separate read-only
+receipt verification after confirmation; it may queue on the existing sync worker,
+but is not awaited by the transaction result. No new infrastructure is introduced.
+
+### Receipt polling and narrowly scoped reader
+
+The first receipt check begins immediately after a valid wallet hash; later attempts
+wait one second **after** the preceding request, at most 20 attempts. Manual Check
+transaction remains available. No automatic re-sign/resubmit or aggressive fixed-rate
+RPC polling is added. This removes the initial 1.5-second application sleep; Sepolia
+inclusion itself is unchanged and cannot be made instantaneous.
+
+Receipt readers skip unrelated pause/count reads, on warm and cold paths. They retain
+fresh chain/head/hash, full/bounded static verification, current receipt/transaction,
+canonical receipt block, server-side deployment event decoding, wallet/participant
+association and confirmation counts. Admin receipt access uses the verified immutable
+Admin identity, not irrelevant ordinary roles. The accepted one-confirmation policy,
+static 60-second trust boundary, reorg checks and failed-receipt unlock behavior remain.
+
+### Controlled performance evidence
+
+Baseline is exact `558fb854168a355f8373e60272ebe53c09e56c7c`. No public-chain transaction,
+hosted timing or production database operation occurs in these measurements.
+
+`results/iteration9_final_performance.csv` / `.md` use the prior controlled fixture,
+11 records, empty-event history and 5 ms emulated transport wait. Real Web3 strict
+batch/ABI handling and real local-EVM HTTP integration are tested independently.
+Middleware/provider-specific extra messages and hosted RPC/Turso latency are excluded.
+
+Cold dashboard critical transports: **55 → 40** (the financial subset itself remains 40); controlled user-ready time **288.87 → 211.73 ms**. Previously readiness awaited Activity; now it excludes Activity. The local isolated SQLite cached Activity HTTP query measured **1.17 ms, zero RPC**; this is not a Turso timing claim.
+
+| Warm operation | Before messages / trips | After messages / trips | Before → after ms |
+|---|---:|---:|---:|
+| prepare transfer | 13/10 | 12/8 | 54.19 → 43.01 |
+| prepare deposit | 11/9 | 10/8 | 47.98 → 42.54 |
+| prepare withdraw | 12/10 | 10/8 | 52.93 → 42.81 |
+| prepare claim | 13/10 | 11/8 | 53.01 → 42.59 |
+| prepare cancel | 13/10 | 11/8 | 53.46 → 42.46 |
+| prepare authorizeSender | 12/10 | 10/8 | 53.55 → 42.73 |
+| receipt read | 10/9 | 8/8 | 47.29 → 41.95 |
+
+Simulation/gas transports are **2 → 1** while retaining both RPC methods. Receipt
+fixture counts exclude evidence-storage writes and use an empty deployment-log payload;
+actual indexed-event responses can do additional work. The deferred receipt UI avoids
+that evidence dependency regardless of timing.
+
+`results/iteration9_final_browser_performance.json` records real headless-browser runs
+against legacy JS from the accepted commit versus final JS, with controlled delays:
+balance/detail 150 ms, recipient preview 400 ms, list/history 600 ms. Measurements begin
+at auth response or the mocked confirmed receipt as labelled; wallet approval, mining,
+initial polling and real RPC are excluded from receipt-to-visible latency.
+
+| Browser measurement | Before ms | After ms |
+|---|---:|---:|
+| Auth to primary ready | 1400 | 779 |
+| Auth to Activity ready | 1402 | 1409 |
+| Valid input change to enabled button | 740 | 7 |
+| Confirmed receipt to visible confirmed result | 1570 | 360 |
+| Confirmed receipt to Activity ready | 1364 | 923 |
+
+Recipient preview RPC count in that enable path was **1 → 0**. The form's Check Inputs
+validation is local; the measured field is specifically valid-input-change to enablement,
+not an invented hosted button-click duration. After confirmation, Activity is measured
+separately and may complete later without withholding the confirmed result.
+
+### Final regression evidence and reproducibility
+
+| Check | Final result |
+|---|---|
+| Solidity 0.8.34 compile | Three frozen contracts, zero warnings |
+| Contract sanity | 10 groups / 50 expected rejections PASS |
+| I7 role characterization | 8 assertions PASS; accepted Low limitation preserved |
+| Comprehensive contract/security evaluation | 71 scenarios, 61 expected rejections, 952 assertions, 48 seeded model transitions PASS |
+| Generic-wrapper characterization | 4 checks PASS |
+| Full Python/backend | 202 tests PASS |
+| Full browser/frontend | 80 tests PASS; 360/768/1280 px and account/chain/cache regression retained |
+| SQLite local-chain HTTP | 14 assertions / 12 canonical events, repeat unchanged PASS |
+| libSQL local-chain HTTP | 14 assertions / 12 canonical events, repeat unchanged PASS |
+| Dependencies / JS syntax / whitespace / protected files | PASS |
+
+New tests cover DB-only history with unavailable RPC, authenticated/CSRF explicit sync,
+retained partial/index-budget failures, simulation+gas same-block batching and partial
+response failure, receipt-only snapshot checks, deferred evidence on SQLite/libSQL,
+all ten local-enable/backend-reject cases with no wallet request, nonblocking primary
+readiness, confirmation without list/history completion, independent sync/storage
+outages and legacy-versus-final browser latency. Existing canonical/reorg, role/pause/
+balance/terminal-state, receipt association, event-derived ID, no-resubmit, account
+switch, one-confirmation and navigation-cache regressions still pass. Tests expecting
+implicit GET reconciliation now exercise explicit POST sync. Earlier remote button-gating
+assertions now require zero remote reads and preserve final backend rejection.
+
+Commands, using existing dependencies and an available Chromium binary:
+
+```sh
+npm run compile:contracts
+npm run sanity:contracts
+node scripts/iteration7-role-boundary.cjs
+node scripts/iteration7-contract-evaluation.cjs
+node scripts/remediation-wallet-characterization.cjs
+python -m unittest discover -s tests -p 'test_*.py' -q
+NODE_PATH="$CODEX_PRIMARY_RUNTIME_NODE_MODULES" PYTHON=python \
+  CHROMIUM_EXECUTABLE_PATH=/path/to/chromium \
+  FRONTEND_PERF_OUTPUT="$PWD/results/iteration9_final_browser_performance.json" \
+  node --test tests/frontend.cjs
+PYTHON=python node tests/local-chain.cjs
+LOCAL_DB_DRIVER=libsql PYTHON=python node tests/local-chain.cjs
+python scripts/profile-final-flow.py
+python -m pip check
+node --check static/js/app.js
+node --check static/js/live.js
+node --check static/js/forms.js
+git diff --check
+```
+
+Git must contain the accepted baseline for legacy characterization. The primary runtime
+provides Playwright; the temporary Chromium restoration adds no app dependency. Ganache
+uses its JS fallback where the native µWS binary is unavailable. Controlled failure
+logs in storage tests are expected regression fixtures, not production incidents.
+
+### Final hosted plan and limitations
+
+After owner review and separate exact-commit deployment authorization, confirm startup,
+served version, deployment identity and source/config invariance. Record authentication
+to **primary-ready** separately from cached Activity-ready. Test Check Inputs and
+unsigned preparation; the owner may reject MetaMask with no transaction. Explicitly
+reconcile Activity and inspect its checked/incomplete/error provenance independently.
+Confirm cross-page cache reuse, account-change reauthentication and correct stale-context
+invalidation. Reuse existing chain evidence; no new write is required merely to measure
+these read/UI improvements. Any further live write requires a separate owner checkpoint.
+
+Cold full deployment verification, RPC round trips, gas simulation, Render cold starts,
+Turso SQL latency, sync-worker queuing and Sepolia block inclusion remain real costs.
+The post-confirmation evidence request adds a read outside the critical path. Bounded
+historical catch-up can remain incomplete until explicitly requested. Cache presentation
+and Activity remain non-authoritative. No claim of instant mining, universal Smart
+Account compatibility, fiat settlement or production financial suitability is made.
+
+Scope: only bounded backend/frontend behavior, tests/performance utilities/results and
+this remediation record changed. Frozen Solidity, deployment addresses/manifests,
+Turso schema/data, environment/secrets/RPC configuration and original I9 evidence remain
+unchanged. No Render deployment, Sepolia write, main merge, Technical Report/slides/Drive
+edit or Iteration 10 work occurred in this pass.
+
+**FINAL PERFORMANCE/PRESENTATION CORRECTION LOCALLY VERIFIED — FINAL HOSTED VERIFICATION REQUIRED**
+The remediation is not frozen yet; this is ready for final owner review.

@@ -29,7 +29,7 @@ export function setupForms(currentWallet, transactionPending = () => false) {
         return message;
       }).filter(Boolean);
       const result = form.querySelector('.form-result');
-      result.textContent = errors[0] || 'Inputs look valid. No transaction was submitted; verified deployment and on-chain permissions are still required.';
+      result.textContent = errors[0] || 'Inputs look valid. Current on-chain permissions, balances and status will be checked when you click the transaction action, before MetaMask opens.';
       result.classList.toggle('error', errors.length > 0);
       firstInvalid?.focus();
     });

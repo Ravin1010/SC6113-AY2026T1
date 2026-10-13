@@ -8,6 +8,7 @@ from eth_account.messages import encode_defunct
 from web3.exceptions import Web3RPCError
 from app import create_app
 from test_blockchain import fixture, RECIPIENT
+from history_helper import sync_history
 
 
 class LiveAPITests(unittest.TestCase):
@@ -32,7 +33,7 @@ class LiveAPITests(unittest.TestCase):
 
     def test_list_contract_discovery_and_history_cache_provenance(self):
         items=self.client.get('/api/remittances').json;self.assertEqual([item['id'] for item in items['items']],['1']);self.assertEqual(items['discovery'],'direct_contract_scan');self.assertTrue(items['authoritative'])
-        history=self.client.get('/api/transactions').json;self.assertTrue(history['live_blockchain_checked']);self.assertFalse(history['authoritative']);self.assertTrue(history['indexing_available'])
+        history=sync_history(self.client).json;self.assertTrue(history['live_blockchain_checked']);self.assertFalse(history['authoritative']);self.assertTrue(history['indexing_available'])
 
     def test_admin_derived_from_chain_only(self):
         self.assertEqual(self.client.get('/api/transactions/audit').status_code,403)

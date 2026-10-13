@@ -1,4 +1,4 @@
-import {requestAPI, friendlyError, deploymentMessages} from './api.js';
+import {requestAPI, postJSON, friendlyError, deploymentMessages} from './api.js';
 import {walletLogin, readSession, endSession, walletConnection} from './auth.js';
 import {setupForms} from './forms.js';
 import {setupLive} from './live.js';
@@ -60,10 +60,12 @@ function deployment(error) {
 
 async function loadDeployment(ticket,account,connection) {
   try {
+    setText('snapshot-status','Loading authoritative balances…');
     const balances = await requestAPI('/api/users/me/balances');
     if (ticket === generation) {
       // Keep the funding reader's current block/pause evidence intact.
       storeState(account,balances);
+      setText('snapshot-status','Loading authoritative remittances…');
       await live.set(account,balances,connection);
     }
   } catch (error) {
@@ -92,20 +94,21 @@ function historyCard(record) {
   return card;
 }
 
-async function loadHistory(ticket) {
+async function loadHistory(ticket,synced=null) {
   if (!byId('history-records')) return;
   const previous = byId('previous-history'), next = byId('next-history');
   previous.disabled = true; next.disabled = true;
   setText('history-status', 'Loading indexed history…');
   byId('history-records').replaceChildren();
   try {
-    const data = await viewRead(`/api/transactions?limit=${historyLimit}&offset=${historyOffset}`,requestAPI);
+    const data = synced || await viewRead(`/api/transactions?limit=${historyLimit}&offset=${historyOffset}`,requestAPI);
     if (ticket !== generation || !session) return;
     if (data.source !== 'sqlite_index' || data.authoritative !== false || typeof data.live_blockchain_checked !== 'boolean' || !Array.isArray(data.items)) throw new Error('History provenance could not be confirmed. No records are displayed.');
     setText('history-provenance', `Source: cached SQLite index · Not authoritative · Live blockchain ${data.live_blockchain_checked ? 'checked' : 'not checked'} · ${data.indexing?.caught_up===true ? 'Historical catch-up complete' : 'Historical catch-up incomplete; newly verified app receipts may already be listed'}.`);
     setText('history-status', data.items.length ? `${data.items.length} indexed record(s) on this page.` : historyOffset ? 'No indexed transactions on this page.' : 'No indexed transactions available yet. This does not establish that blockchain history is empty.');
     byId('history-records').replaceChildren(...data.items.map(historyCard));
     previous.disabled = historyOffset === 0; next.disabled = data.items.length < historyLimit;
+    if(data.live_error)setText('history-status',`Cached records displayed. Live reconciliation unavailable: ${friendlyError(data.live_error)}`);
   } catch (error) {
     if (ticket !== generation) return;
     setText('history-status', `Indexed history unavailable. ${friendlyError(error)}`);
@@ -126,16 +129,16 @@ async function loadAccount(ticket,force=false) {
   setText('wallet-network',connection.network);
   if(!['/main','/depositMoney','/transferMoney'].includes(window.location.pathname))return;
   const cached=cachedState();
-  if(cached){setText('snapshot-status','Reusing a blockchain presentation snapshot. Refresh to check changes made by other wallets.');await Promise.all([live.set(cached.account,cached.balances,connection),loadHistory(ticket)]);return;}
-  setText('snapshot-status','Reading current verified blockchain state…');
+  if(cached){setText('snapshot-status','Reusing a blockchain presentation snapshot. Refresh to check changes made by other wallets.');await live.set(cached.account,cached.balances,connection);void loadHistory(ticket).catch(handleError);return;}
+  setText('snapshot-status','Authenticated. Verifying Sepolia deployment and roles…');
   const data=await requestAPI('/api/users/me');
   if(ticket!==generation||!session)return;
   if(data.wallet.toLowerCase()!==session.wallet.toLowerCase())throw new Error('Wallet session changed. Sign in again.');
   setText('role-status','Role information unavailable until verified Sepolia deployment.');
   if(data.roles?.error)deployment(data.roles.error);
   await loadDeployment(ticket,data,connection);
-  setText('snapshot-status','Blockchain view checked. Navigation reuses this snapshot; Refresh checks for external changes.');
-  if(ticket===generation)await loadHistory(ticket);
+  setText('snapshot-status','Primary blockchain view checked. Activity loads separately; navigation reuses this snapshot. Refresh checks external changes.');
+  if(ticket===generation)void loadHistory(ticket).catch(handleError);
 }
 
 let restoring=null;
@@ -192,6 +195,19 @@ for (const [id, direction] of [['previous-history', -1], ['next-history', 1]]) {
   });
 }
 
+byId('sync-history')?.addEventListener('click',async()=>{
+  if(!session||busy||live.isSending())return;
+  const button=byId('sync-history'),ticket=generation;button.disabled=true;
+  setText('history-status','Reconciling Activity with Sepolia; financial state is independent…');
+  try{
+    const data=await postJSON(`/api/transactions/sync?limit=${historyLimit}&offset=${historyOffset}`,{},session.csrf_token);
+    if(ticket!==generation||!session)return;
+    invalidateReads(path=>path.startsWith('/api/transactions?'));
+    await loadHistory(ticket,data);
+  }catch(error){if(ticket===generation){setText('history-status',`Activity reconciliation unavailable. ${friendlyError(error)}`);if(error.code==='AUTH_REQUIRED')handleError(error);}}
+  finally{button.disabled=false;}
+});
+
 const toggle = byId('menu-toggle'), nav = byId('site-nav');
 function closeMenu() { nav.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); }
 toggle.addEventListener('click', () => { const open = nav.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)); });
@@ -204,6 +220,18 @@ function restore() {
 }
 let refreshing=null;
 async function refreshSelective(options) {
+  if(options?.presentation){
+    const ticket=generation;
+    // Reverify/persist server-decoded receipt evidence AFTER the confirmed UI.
+    // This preserves the accepted idempotent fast path without gating finance.
+    let evidenceError=null;
+    try{await requestAPI(`/api/transactions/${options.hash}/receipt`);}
+    catch(error){evidenceError=error;if(ticket===generation&&error.code==='AUTH_REQUIRED')handleError(error);}
+    if(ticket!==generation||!session)return;
+    await Promise.all([['transfer','claim','cancel'].includes(options.action)?live.refreshList():Promise.resolve(),loadHistory(ticket)]);
+    if(ticket===generation&&evidenceError)setText('history-status',`Confirmed transaction; Activity evidence update unavailable. ${friendlyError(evidenceError)}`);
+    return;
+  }
   if(options?.history)return loadHistory(generation);
   if(!refreshing)refreshing=(async()=>{
     const previous=cachedState(),expected=session;
@@ -227,8 +255,8 @@ async function refreshSelective(options) {
       if(ticket!==generation||session!==expected)return;
       if(connection.address.toLowerCase()!==expected.wallet.toLowerCase()){await invalidateWallet();return;}
       storeState(account,balances,{preserveReads:true});
-      await live.set(account,balances,connection,{list:['transfer','claim','cancel'].includes(action)});
-      if(ticket===generation){await loadHistory(ticket);setText('snapshot-status','Affected state checked. Refresh checks external changes.');}
+      await live.set(account,balances,connection,{list:false});
+      if(ticket===generation)setText('snapshot-status','Affected authoritative state checked. Presentation history updates separately.');
     }else{
       clearCache();live.invalidate();const ticket=++generation;await loadAccount(ticket);
     }

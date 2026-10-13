@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const {test, before, after} = require('node:test');
 const {spawn, spawnSync} = require('node:child_process');
-const {mkdtempSync, rmSync, readFileSync, readdirSync} = require('node:fs');
+const {mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync} = require('node:fs');
 const {tmpdir} = require('node:os');
 const {resolve, join} = require('node:path');
 const net = require('node:net');
@@ -189,13 +189,13 @@ test('form validation never submits a transaction', async () => {
   assert.match(await page.locator('#create-result').textContent(),/positive/);
   await page.locator('#remittance-amount').fill('0.000000000000000001');
   await page.locator('form[data-preview]').first().getByText('Check inputs').click();
-  assert.match(await page.locator('#create-result').textContent(),/No transaction was submitted/);
+  assert.match(await page.locator('#create-result').textContent(),/before MetaMask opens/);
   await page.locator('#remittance-id').fill('1.5');
   await page.locator('form[data-preview]').last().getByText('Check inputs').click();
   assert.match(await page.locator('#manage-result').textContent(),/whole-number/);
   await page.locator('#remittance-id').fill('1');
   await page.locator('form[data-preview]').last().getByText('Check inputs').click();
-  assert.match(await page.locator('#manage-result').textContent(),/No transaction was submitted/);
+  assert.match(await page.locator('#manage-result').textContent(),/before MetaMask opens/);
   await assertDisabled(page);
   await page.goto(origin+'/depositMoney'); await page.waitForLoadState('networkidle');
   await page.locator('#deposit-amount').fill('1e2');
@@ -266,12 +266,12 @@ async function verifiedRoutes(page,{admin=true,sender=true,paused=false,wired=tr
   const deployment={deployment_verified:true,wired,paused,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20};
   await page.route('**/api/users/me',route=>route.fulfill({json:{wallet:account.address,roles:{available:true,source:'verified_contract',admin,sender,recipient:false},deployment}}));
   await page.route('**/api/users/me/balances',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1000000000000000000',test_eth:'1'},reserved:{wei:'0',test_eth:'0'},deployment}}));
-  await page.route('**/api/users/roles/**',route=>route.fulfill({json:{available:true,source:'verified_contract',sender:targetSender,recipient:targetRecipient}}));
+  await page.route('**/api/users/roles/**',route=>route.fulfill({json:{available:true,source:'verified_contract',sender:complete&&lastAction==='authorizeSender'?true:complete&&lastAction==='revokeRole'?false:targetSender,recipient:complete&&lastAction==='authorizeRecipient'?true:targetRecipient}}));
   await page.route('**/api/remittances?*',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,items:[],discovery:'direct_contract_scan'}}));
-  await page.route('**/api/remittances/7',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'7',sender:account.address,recipient:'0x'+'e'.repeat(40),amount:{wei:'1000000000000000',test_eth:'0.001'},status:'PENDING'}}));
-  await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:claim?'0x'+'e'.repeat(40):account.address,recipient:claim?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},status:complete&&['claim','cancel'].includes(lastAction)?(lastAction==='claim'?'COMPLETED':'CANCELLED'):'PENDING'}}));
+  await page.route('**/api/remittances/7',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'7',sender:account.address,recipient:'0x'+'e'.repeat(40),amount:{wei:'1000000000000000',test_eth:'0.001'},status:'PENDING',reservation_active:true}}));
+  await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:claim?'0x'+'e'.repeat(40):account.address,recipient:claim?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},reservation_active:!complete,status:complete&&['claim','cancel'].includes(lastAction)?(lastAction==='claim'?'COMPLETED':'CANCELLED'):'PENDING'}}));
   await page.route('**/api/transactions?*',route=>route.fulfill({json:{source:'sqlite_index',authoritative:false,live_blockchain_checked:true,indexing_available:true,items:[]}}));
-  await page.route('**/api/transactions/*/receipt',route=>{complete=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1,activity_indexed:true,deployment_logs:lastAction==='transfer'?[{contract:'paynow',event:'RemittanceCreated',args:{sender:account.address,recipient:'0x'+'e'.repeat(40),amount:'1000000000000000',remittanceId:'7'}}]:[],transaction_hash:'0x'+'f'.repeat(64)}});});
+  await page.route('**/api/transactions/*/receipt*',route=>{complete=true;if(lastAction==='pause')deployment.paused=true;if(lastAction==='unpause')deployment.paused=false;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1,activity_indexed:true,deployment_logs:lastAction==='transfer'?[{contract:'paynow',event:'RemittanceCreated',args:{sender:account.address,recipient:'0x'+'e'.repeat(40),amount:'1000000000000000',remittanceId:'7'}}]:[],transaction_hash:'0x'+'f'.repeat(64)}});});
   await page.route('**/api/transactions/prepare',route=>{
     const {action,arguments:args}=route.request().postDataJSON();lastAction=action;
     const name=['authorizeSender','authorizeRecipient','revokeRole','pause','unpause'].includes(action)?'RoleRegistry':['deposit','withdraw'].includes(action)?'deposit_money':'paynow';
@@ -334,17 +334,17 @@ for(const action of ['claim','cancel'])test(`${action} refreshes terminal detail
   page.on('request',request=>{if(new URL(request.url()).pathname==='/api/users/me')identityReads++;});
   await page.route('**/api/remittances/1',route=>{
     detailReads++;
-    return route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:action==='claim'?'0x'+'e'.repeat(40):account.address,recipient:action==='claim'?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},status:terminal?(action==='claim'?'COMPLETED':'CANCELLED'):'PENDING'}});
+    return route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:action==='claim'?'0x'+'e'.repeat(40):account.address,recipient:action==='claim'?account.address:'0x'+'e'.repeat(40),amount:{wei:'1',test_eth:'0.000000000000000001'},reservation_active:!terminal,status:terminal?(action==='claim'?'COMPLETED':'CANCELLED'):'PENDING'}});
   });
-  await page.route('**/api/transactions/*/receipt',route=>{terminal=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1}});});
+  await page.route('**/api/transactions/*/receipt*',route=>{terminal=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1}});});
   page.on('request',request=>{if(new URL(request.url()).pathname==='/api/users/me/balances')balanceReads++;});
   await guest(page,'/transferMoney');await login(page);await page.locator('#remittance-id').fill('1');
   const button=page.locator(`[data-blockchain-action="${action}"]`);await waitFor(()=>button.isEnabled());
-  assert.equal(detailReads,1,'claim/cancel eligibility shares a single ID read');
+  assert.equal(detailReads,0,'local eligibility performs no authoritative ID read');
   const beforeIdentity=identityReads,beforeBalance=balanceReads;
   await button.click();
   await waitFor(async()=> (await page.locator('#remittance-detail').textContent()).includes(action==='claim'?'COMPLETED':'CANCELLED'));
-  assert.equal(detailReads,2);assert.equal(identityReads,beforeIdentity);assert.equal(balanceReads,beforeBalance+1);
+  assert.equal(detailReads,1);assert.equal(identityReads,beforeIdentity);assert.equal(balanceReads,beforeBalance+1);
   assert.ok(await page.locator('[data-blockchain-action="claim"]').isDisabled());
   assert.ok(await page.locator('[data-blockchain-action="cancel"]').isDisabled());
   await context.close();
@@ -371,13 +371,13 @@ test('ordinary clicks, section navigation and focus never reload full chain stat
   await context.close();
 });
 
-test('admin eligibility deduplicates target role reads across actions and ordinary inputs',async()=>{
+test('admin eligibility uses local inputs with zero remote role reads',async()=>{
   const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);let reads=0;
   page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/users/roles/'))reads++;});
   await guest(page);await login(page);await page.locator('#admin-wallet').fill('0x'+'e'.repeat(40));
   await waitFor(()=>page.locator('[data-blockchain-action="authorizeSender"]').isEnabled());
-  assert.equal(reads,1);
-  await page.locator('#ordinary-role').selectOption('recipient');await pause(450);assert.equal(reads,1);
+  assert.equal(reads,0);
+  await page.locator('#ordinary-role').selectOption('recipient');await pause(450);assert.equal(reads,0);
   await context.close();
 });
 
@@ -388,14 +388,14 @@ for(const action of ['pause','authorizeSender'])test(`${action} invalidates cach
   await page.route('**/api/users/me',route=>route.fulfill({json:{wallet:account.address,roles:{available:true,source:'verified_contract',admin:true,sender:action==='authorizeSender'&&applied,recipient:false,paused:action==='pause'&&applied},deployment:{...deployment,paused:action==='pause'&&applied}}}));
   await page.route('**/api/users/me/balances',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1000000000000000000',test_eth:'1'},reserved:{wei:'0',test_eth:'0'},deployment:{...deployment,paused:action==='pause'&&applied}}}));
   await page.route('**/api/users/roles/**',route=>route.fulfill({json:{available:true,source:'verified_contract',sender:applied,recipient:false}}));
-  await page.route('**/api/transactions/*/receipt',route=>{applied=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1}});});
+  await page.route('**/api/transactions/*/receipt*',route=>{applied=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1}});});
   page.on('request',request=>{const path=new URL(request.url()).pathname;if(path==='/api/users/me/balances')balanceReads++;if(path==='/api/remittances')listReads++;});
   await guest(page);await login(page);if(action==='authorizeSender')await page.locator('#admin-wallet').fill(account.address);
   const button=page.locator(`[data-blockchain-action="${action}"]`);await waitFor(()=>button.isEnabled());
   const before=[balanceReads,listReads];await button.click();
   await waitFor(async()=>action==='pause'?await page.locator('[data-blockchain-action="unpause"]').isEnabled():(await page.locator('#role-status').textContent()).includes('Sender'));
   await page.waitForLoadState('networkidle');assert.deepEqual([balanceReads,listReads],before);
-  assert.ok(await button.isDisabled());await context.close();
+  assert.ok(action==='pause'?await button.isDisabled():await button.isEnabled());await context.close();
 });
 
 function countReads(page){
@@ -428,7 +428,7 @@ test('funding first load omits unrelated activity and loads dashboard sections o
 });
 for(const status of ['rejected','failed'])test(`${status} transaction preserves snapshot without fresh blockchain load`,async()=>{
   const {page,context}=await pageWithWallet(status==='rejected'?'reject-tx':'live-test');await verifiedRoutes(page);
-  if(status==='failed')await page.route('**/api/transactions/*/receipt',route=>route.fulfill({json:{status:'FAILED',canonical:true,confirmations:1}}));
+  if(status==='failed')await page.route('**/api/transactions/*/receipt*',route=>route.fulfill({json:{status:'FAILED',canonical:true,confirmations:1}}));
   const counts=countReads(page);await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
   const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());const before={...counts};
   const cacheBefore=await page.evaluate(()=>sessionStorage.getItem('sc6113-view-v1'));
@@ -474,8 +474,8 @@ for(const failure of ['receipt','post-state'])test(`${failure} outage preserves 
   const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page,{claim:true,sender:false});
   let receipts=0,terminal=false,postFailed=false;
   const deployment={deployment_verified:true,wired:true,paused:false,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20};
-  await page.route('**/api/transactions/*/receipt',route=>{
-    receipts++;
+  await page.route('**/api/transactions/*/receipt*',route=>{
+    if(route.request().url().includes('index=deferred'))receipts++;
     if(failure==='receipt'&&receipts===1)return route.fulfill({status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Temporary test outage'}}});
     terminal=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1,activity_indexed:true}});
   });
@@ -483,7 +483,7 @@ for(const failure of ['receipt','post-state'])test(`${failure} outage preserves 
     if(terminal&&failure==='post-state'&&!postFailed){postFailed=true;return route.fulfill({status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Temporary post-state outage'}}});}
     return route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1',test_eth:'0.000000000000000001'},reserved:{wei:terminal?'0':'1',test_eth:terminal?'0':'0.000000000000000001'},deployment}});
   });
-  await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:'0x'+'e'.repeat(40),recipient:account.address,amount:{wei:'1',test_eth:'0.000000000000000001'},status:terminal?'COMPLETED':'PENDING',reservation_active:!terminal}}));
+  await page.route('**/api/remittances/1',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,id:'1',sender:'0x'+'e'.repeat(40),recipient:account.address,amount:{wei:'1',test_eth:'0.000000000000000001'},reservation_active:!terminal,status:terminal?'COMPLETED':'PENDING'}}));
   await guest(page,'/transferMoney');await login(page);await page.locator('#remittance-id').fill('1');
   const button=page.locator('[data-blockchain-action="claim"]');await waitFor(()=>button.isEnabled());await button.click();
   await waitFor(async()=> (await page.locator('[data-verify-transaction]').count())===1);
@@ -507,7 +507,7 @@ for(const failure of ['receipt','post-state'])test(`${failure} outage preserves 
 test('unresolved submitted receipt survives route navigation and only verification can retry',async()=>{
   const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
   let receipts=0;
-  await page.route('**/api/transactions/*/receipt',route=>{receipts++;return route.fulfill(receipts===1?{status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Unavailable'}}}:{json:{status:'FAILED',canonical:true,confirmations:1}});});
+  await page.route('**/api/transactions/*/receipt*',route=>{if(route.request().url().includes('index=deferred'))receipts++;return route.fulfill(receipts===1?{status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Unavailable'}}}:{json:{status:'FAILED',canonical:true,confirmations:1}});});
   await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
   const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());await button.click();
   await waitFor(()=>page.locator('[data-verify-transaction]').isVisible());
@@ -552,7 +552,7 @@ for(const width of [360,768,1280])test(`populated Activity and role-aware financ
 // Post-I9 remediation: no public RPC or wallet writes.
 test('zero confirmations locks submission; one canonical block completes without later confirmations',async()=>{
  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);let receipts=0;
- await page.route('**/api/transactions/*/receipt',route=>{receipts++;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:receipts===1?0:1}});});
+ await page.route('**/api/transactions/*/receipt*',route=>{if(route.request().url().includes('index=deferred'))receipts++;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:receipts===1?0:1}});});
  const reads=countReads(page);await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
  const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());await button.click();
  await waitFor(()=>receipts===1);assert.ok(await button.isDisabled());assert.equal(reads.balance,1);
@@ -590,7 +590,7 @@ test('different account revokes old session; new signed login gets fresh identit
 });
 test('account switch preserves unresolved hash only under original wallet key',async()=>{
  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
- await page.route('**/api/transactions/*/receipt',route=>route.fulfill({status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'fixture outage'}}}));
+ await page.route('**/api/transactions/*/receipt*',route=>route.fulfill({status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'fixture outage'}}}));
  await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
  const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());await button.click();await waitFor(()=>page.locator('[data-verify-transaction]').isVisible());
  await page.evaluate(()=>{window.__walletAddress='0x'+'d'.repeat(40);window.__emitWallet('accountsChanged',[window.__walletAddress]);});
@@ -615,7 +615,7 @@ test('ordinary-account guidance is visible; no speculative wallet API support ad
 });
 test('creation without the verified matching event remains locked and never guesses an ID',async()=>{
  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
- await page.route('**/api/transactions/*/receipt',route=>route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1,deployment_logs:[]}}));
+ await page.route('**/api/transactions/*/receipt*',route=>route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1,deployment_logs:[]}}));
  await guest(page,'/transferMoney');await login(page);await page.locator('#recipient-wallet').fill('0x'+'e'.repeat(40));await page.locator('#remittance-amount').fill('0.001');
  const button=page.locator('[data-blockchain-action="transfer"]');await waitFor(()=>button.isEnabled());await button.click();
  await waitFor(()=>page.locator('[data-verify-transaction]').isVisible());assert.ok(await button.isDisabled());
@@ -632,4 +632,122 @@ test('failed logout on account change cannot restore the obsolete session after 
  assert.equal(await page.locator('#wallet-address').textContent(),'Unavailable');
  await login(page);assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-reauth-required')),null);
  await context.close();
+});
+
+
+for(const action of ['authorizeSender','authorizeRecipient','revokeRole','pause','unpause','deposit','withdraw','transfer','claim','cancel'])test(`local ${action} eligibility never bypasses rejected backend preparation`,async()=>{
+  const {page,context}=await pageWithWallet('live-test');
+  await verifiedRoutes(page,{paused:action==='unpause'});let roleReads=0,detailReads=0;
+  page.on('request',request=>{const path=new URL(request.url()).pathname;if(path.startsWith('/api/users/roles/'))roleReads++;if(/\/api\/remittances\/\d+$/.test(path))detailReads++;});
+  await page.route('**/api/transactions/prepare',route=>route.fulfill({status:409,json:{error:{code:'ACTION_NOT_ALLOWED',message:'Current authoritative state rejected this action.'}}}));
+  const route=['deposit','withdraw'].includes(action)?'/depositMoney':['transfer','claim','cancel'].includes(action)?'/transferMoney':'/main';
+  await guest(page,route);await login(page);
+  if(['authorizeSender','authorizeRecipient','revokeRole'].includes(action))await page.locator('#admin-wallet').fill('0x'+'e'.repeat(40));
+  if(action==='deposit')await page.locator('#deposit-amount').fill('0.001');
+  if(action==='withdraw')await page.locator('#withdraw-amount').fill('0.001');
+  if(action==='transfer'){await page.locator('#recipient-wallet').fill('0x'+'e'.repeat(40));await page.locator('#remittance-amount').fill('0.001');}
+  if(['claim','cancel'].includes(action))await page.locator('#remittance-id').fill('1');
+  const button=page.locator(`[data-blockchain-action="${action}"]`);await waitFor(()=>button.isEnabled());
+  assert.equal(roleReads,0);assert.equal(detailReads,0);
+  await button.click();await waitFor(async()=>(await page.locator('.form-result,#transaction-status').allTextContents()).some(t=>t.includes('rejected this action')));
+  assert.equal(await page.evaluate(()=>window.__sendCount||0),0);await context.close();
+});
+
+test('primary dashboard readiness never waits for cached Activity and failures preserve financial state',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+  let release,started=false;const gate=new Promise(resolve=>release=resolve);
+  await page.route('**/api/transactions?*',async route=>{started=true;await gate;await route.fulfill({status:503,json:{error:{code:'STORAGE_UNAVAILABLE',message:'Controlled history outage'}}});});
+  await guest(page);await page.locator('#login').click();
+  await waitFor(()=>page.locator('#logout').isEnabled());await waitFor(()=>started);
+  assert.ok((await page.locator('#available-balance').textContent()).includes('1 test ETH'));
+  assert.ok((await page.locator('#live-remittances').textContent()).includes('direct verified contract scan'));
+  assert.ok((await page.locator('#history-status').textContent()).includes('Loading'));
+  release();await waitFor(async()=>(await page.locator('#history-status').textContent()).includes('unavailable'));
+  assert.ok((await page.locator('#available-balance').textContent()).includes('1 test ETH'));await context.close();
+});
+
+test('confirmed creation does not await full list or Activity and still verifies the exact ID',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+  let done=false,releaseList,releaseHistory;
+  const listGate=new Promise(resolve=>releaseList=resolve),historyGate=new Promise(resolve=>releaseHistory=resolve);
+  await page.route('**/api/remittances?*',async route=>{if(done)await listGate;await route.fulfill({json:{source:'verified_contract',authoritative:true,items:[]}});});
+  await page.route('**/api/transactions?*',async route=>{if(done)await historyGate;await route.fulfill({json:{source:'sqlite_index',authoritative:false,live_blockchain_checked:false,items:[]}});});
+  await page.route('**/api/transactions/*/receipt*',route=>{done=true;return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1,deployment_logs:[{contract:'paynow',event:'RemittanceCreated',args:{sender:account.address,recipient:'0x'+'e'.repeat(40),amount:'1000000000000000',remittanceId:'7'}}]}});});
+  await guest(page,'/transferMoney');
+  await page.evaluate(()=>{const panel=document.createElement('section');panel.innerHTML='<div id="live-remittances"></div><div id="history-records"></div><div id="history-status"></div><div id="history-provenance"></div><button id="previous-history"></button><button id="next-history"></button>';document.body.append(panel);});
+  await login(page);
+  await page.locator('#recipient-wallet').fill('0x'+'e'.repeat(40));await page.locator('#remittance-amount').fill('0.001');
+  const button=page.locator('[data-blockchain-action="transfer"]');await waitFor(()=>button.isEnabled());await button.click();
+  await waitFor(async()=>(await page.locator('#create-result').textContent()).includes('Remittance created — ID #7'));
+  assert.ok((await page.locator('#create-result').textContent()).includes('Confirmed (1 confirmation)'));
+  releaseList();releaseHistory();await context.close();
+});
+
+
+test('reproducible legacy-versus-final presentation latency characterization',async()=>{
+  const rows=[];
+  for(const variant of ['before','after']){
+    const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+    if(variant==='before')for(const name of ['app','live','forms']){
+      const result=spawnSync('git',['show',`558fb854168a355f8373e60272ebe53c09e56c7c:static/js/${name}.js`],{cwd:repo,encoding:'utf8'});assert.equal(result.status,0);
+      await page.route(`**/static/js/${name}.js`,route=>route.fulfill({contentType:'text/javascript',body:result.stdout}));
+    }
+    let authAt=0,receiptAt=0,phase='load',roleReads=0,historyCompleted=0;
+    page.on('response',response=>{if(new URL(response.url()).pathname==='/api/auth/verify'&&response.status()===200)authAt=Date.now();});
+    const deployment={deployment_verified:true,wired:true,paused:false,chain_id:11155111,deployment_id:'browser-fixture',addresses:fixtureAddresses,admin:account.address,block_number:20};
+    await page.route('**/api/users/me/balances',async route=>{await pause(150);await route.fulfill({json:{source:'verified_contract',authoritative:true,available:{wei:'1000000000000000000',test_eth:'1'},reserved:{wei:'0',test_eth:'0'},deployment}});});
+    await page.route('**/api/users/roles/**',async route=>{roleReads++;await pause(400);await route.fulfill({json:{available:true,source:'verified_contract',sender:false,recipient:true}});});
+    await page.route('**/api/remittances?*',async route=>{await pause(600);await route.fulfill({json:{source:'verified_contract',authoritative:true,items:[]}});});
+    await page.route('**/api/remittances/7',async route=>{await pause(150);await route.fulfill({json:{source:'verified_contract',authoritative:true,id:'7',sender:account.address,recipient:'0x'+'e'.repeat(40),amount:{wei:'1000000000000000',test_eth:'0.001'},status:'PENDING',reservation_active:true}});});
+    await page.route('**/api/transactions?*',async route=>{const current=phase;await pause(600);await route.fulfill({json:{source:'sqlite_index',authoritative:false,live_blockchain_checked:false,items:[]}});if(current==='confirmed')historyCompleted=Date.now();});
+    await page.route('**/api/transactions/*/receipt*',route=>{if(phase!=='confirmed')receiptAt=Date.now();phase='confirmed';return route.fulfill({json:{status:'CONFIRMED',canonical:true,confirmations:1,deployment_logs:[{contract:'paynow',event:'RemittanceCreated',args:{sender:account.address,recipient:'0x'+'e'.repeat(40),amount:'1000000000000000',remittanceId:'7'}}]}});});
+    await guest(page,'/transferMoney');
+    await page.evaluate(()=>{const panel=document.createElement('section');panel.innerHTML='<div id="live-remittances"></div><div id="history-records"></div><div id="history-status"></div><div id="history-provenance"></div><button id="previous-history"></button><button id="next-history"></button>';document.body.append(panel);});
+    await page.locator('#login').click();await waitFor(()=>page.locator('#logout').isEnabled());const ready=Date.now()-authAt;
+    await waitFor(async()=>!(await page.locator('#history-status').textContent()).includes('Loading'));const activity=Date.now()-authAt;
+    await page.locator('#recipient-wallet').fill('0x'+'e'.repeat(40));const enabledAt=Date.now();await page.locator('#remittance-amount').fill('0.001');
+    const button=page.locator('[data-blockchain-action="transfer"]');await waitFor(()=>button.isEnabled());const enable=Date.now()-enabledAt;
+    await button.click();await waitFor(async()=>(await page.locator('#create-result').textContent()).includes('Remittance created — ID #7'));const confirmed=Date.now()-receiptAt;
+    if(variant==='after')assert.equal(historyCompleted,0,'Activity cannot gate confirmation');
+    await waitFor(()=>historyCompleted>0);
+    rows.push({implementation:variant,auth_to_primary_ready_ms:ready,auth_to_activity_ready_ms:activity,local_input_enable_ms:enable,eligibility_role_rpc:roleReads,receipt_to_visible_confirmed_ms:confirmed,receipt_to_activity_ready_ms:historyCompleted-receiptAt});
+    await context.close();
+  }
+  assert.equal(rows[1].eligibility_role_rpc,0);assert.equal(rows[0].eligibility_role_rpc,1);
+  assert.ok(rows[1].auth_to_primary_ready_ms<rows[0].auth_to_primary_ready_ms);
+  assert.ok(rows[1].receipt_to_visible_confirmed_ms<rows[0].receipt_to_visible_confirmed_ms);
+  if(process.env.FRONTEND_PERF_OUTPUT)writeFileSync(process.env.FRONTEND_PERF_OUTPUT,JSON.stringify({baseline:'558fb854168a355f8373e60272ebe53c09e56c7c',method:'Controlled browser delays: balances/detail 150ms; role preview 400ms; list/history 600ms. No public chain. Receipt-to-visible starts at mocked confirmed response, excluding inclusion and initial polling.',rows},null,2)+'\n');
+});
+
+test('explicit Activity reconciliation is CSRF protected, scoped and independent of financial presentation',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+  await page.route('**/api/transactions?*',route=>route.fulfill({json:{source:'sqlite_index',authoritative:false,live_blockchain_checked:false,items:[]}}));
+  let synced=0;
+  await page.route('**/api/transactions/sync?*',route=>{synced++;assert.ok(route.request().headers()['x-csrf-token']);assert.deepEqual(route.request().postDataJSON(),{});return route.fulfill({json:{source:'sqlite_index',authoritative:false,live_blockchain_checked:true,indexing:{caught_up:false},items:[]}});});
+  await guest(page);await login(page);assert.equal(synced,0);
+  const balance=await page.locator('#available-balance').textContent();
+  await page.locator('#sync-history').click();await waitFor(async()=>(await page.locator('#history-provenance').textContent()).includes('Live blockchain checked'));
+  assert.equal(synced,1);assert.equal(await page.locator('#available-balance').textContent(),balance);
+  assert.ok((await page.locator('#history-provenance').textContent()).includes('Not authoritative'));await context.close();
+});
+
+test('Activity sync outage cannot invalidate authenticated financial state',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+  await page.route('**/api/transactions/sync?*',route=>route.fulfill({status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Controlled reconciliation outage'}}}));
+  await guest(page);await login(page);const balance=await page.locator('#available-balance').textContent();
+  await page.locator('#sync-history').click();await waitFor(async()=>(await page.locator('#history-status').textContent()).includes('reconciliation unavailable'));
+  assert.equal(await page.locator('#available-balance').textContent(),balance);assert.ok(await page.locator('#logout').isVisible());await context.close();
+});
+
+test('deferred Activity evidence storage failure cannot undo confirmed financial result',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+  await page.route('**/api/transactions/*/receipt*',route=>route.fulfill(route.request().url().includes('index=deferred')?{json:{status:'CONFIRMED',canonical:true,confirmations:1,activity_index_pending:true}}:{status:503,json:{error:{code:'STORAGE_UNAVAILABLE',message:'Controlled evidence storage outage'}}}));
+  await guest(page,'/depositMoney');
+  await page.evaluate(()=>{const panel=document.createElement('section');panel.innerHTML='<div id="history-records"></div><div id="history-status"></div><div id="history-provenance"></div><button id="previous-history"></button><button id="next-history"></button>';document.body.append(panel);});
+  await login(page);await page.locator('#deposit-amount').fill('0.001');
+  const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());await button.click();
+  await waitFor(async()=>(await page.locator('#deposit-result').textContent()).includes('Confirmed (1 confirmation)'));
+  await waitFor(async()=>(await page.locator('#history-status').textContent()).includes('evidence update unavailable'));
+  assert.ok((await page.locator('#deposit-result').textContent()).includes('Confirmed (1 confirmation)'));
+  assert.ok((await page.locator('#available-balance').textContent()).includes('1 test ETH'));assert.equal(await page.evaluate(()=>window.__sendCount),1);await context.close();
 });

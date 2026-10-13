@@ -8,6 +8,7 @@ from requests.exceptions import ReadTimeout
 from web3 import Web3
 import test_blockchain as baseline
 from backend.database import get_db
+from history_helper import sync_history
 from backend.indexer import index_events, BudgetProvider
 
 
@@ -68,7 +69,7 @@ class HostedIndexTests(unittest.TestCase):
     def test_history_receipt_failure_returns_structured_unavailable_not_500(self):
         self.event();client=self.client()
         with patch('backend.api.get_reader',return_value=self.reader),patch.object(self.eth,'get_transaction_receipt',side_effect=ReadTimeout('secret URL must not leak')):
-            response=client.get('/api/transactions?limit=20&offset=0')
+            response=sync_history(client,'?limit=20&offset=0')
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.json['live_error']['code'],'BLOCKCHAIN_READER_UNAVAILABLE')
         self.assertNotIn('secret',response.text)
@@ -78,7 +79,7 @@ class HostedIndexTests(unittest.TestCase):
         original=self.eth.get_transaction_receipt
         def slow(tx):clock[0]+=7;return original(tx)
         with patch('backend.api.get_reader',return_value=self.reader),patch('backend.indexer.time.monotonic',side_effect=lambda:clock[0]),patch.object(self.eth,'get_transaction_receipt',side_effect=slow):
-            response=client.get('/api/transactions?limit=20&offset=0')
+            response=sync_history(client,'?limit=20&offset=0')
         self.assertEqual(response.status_code,200)
         self.assertFalse(response.json['indexing']['caught_up'])
         self.assertEqual(response.json['items'],[])
@@ -126,7 +127,7 @@ class HostedIndexTests(unittest.TestCase):
         self.reader.web3=Web3(Web3.HTTPProvider(f'http://127.0.0.1:{server.server_port}'))
         self.app.config['BLOCKCHAIN_INDEX_SECONDS']=.2
         client=self.client();started=time.monotonic()
-        with patch('backend.api.get_reader',return_value=self.reader):response=client.get('/api/transactions?limit=20&offset=0')
+        with patch('backend.api.get_reader',return_value=self.reader):response=sync_history(client,'?limit=20&offset=0')
         self.assertLess(time.monotonic()-started,1)
         self.assertEqual(response.status_code,200,response.text)
         self.assertEqual(response.json['live_error']['code'],'BLOCKCHAIN_READER_UNAVAILABLE')
@@ -144,7 +145,7 @@ class HostedIndexTests(unittest.TestCase):
     def test_history_malformed_receipt_returns_unavailable_and_no_incomplete_checkpoint(self):
         log=self.event();client=self.client()
         del self.receipts[Web3.to_hex(log['transactionHash'])]['blockHash']
-        with patch('backend.api.get_reader',return_value=self.reader):response=client.get('/api/transactions?limit=20&offset=0')
+        with patch('backend.api.get_reader',return_value=self.reader):response=sync_history(client,'?limit=20&offset=0')
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.json['live_error']['code'],'INDEX_RECONCILIATION_FAILED')
         self.assertEqual(get_db().execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0],0)
