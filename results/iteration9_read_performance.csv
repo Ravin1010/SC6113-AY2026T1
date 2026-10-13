@@ -1,0 +1,11 @@
+implementation,endpoint,rpc_calls,static_verifications,elapsed_ms,controlled_rpc_delay_ms,rpc_breakdown
+before,/api/users/me,26,1,133.81,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 9, ""get_block"": 6, ""get_code"": 3, ""get_transaction"": 3, ""get_transaction_receipt"": 3}"
+before,/api/users/me/balances,26,1,134.23,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 9, ""get_block"": 6, ""get_code"": 3, ""get_transaction"": 3, ""get_transaction_receipt"": 3}"
+before,/api/remittances,56,1,287.48,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 29, ""get_block"": 16, ""get_code"": 3, ""get_transaction"": 3, ""get_transaction_receipt"": 3}"
+before,/api/transactions,33,1,173.31,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 7, ""get_block"": 12, ""get_code"": 3, ""get_logs"": 3, ""get_transaction"": 3, ""get_transaction_receipt"": 3}"
+before,/api/transactions/prepare,31,1,161.65,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 11, ""estimate_gas"": 1, ""get_block"": 7, ""get_code"": 3, ""get_transaction"": 3, ""get_transaction_receipt"": 3, ""simulation"": 1}"
+after,/api/users/me,26,1,134.77,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 9, ""get_block"": 6, ""get_code"": 3, ""get_transaction"": 3, ""get_transaction_receipt"": 3}"
+after,/api/users/me/balances,16,0,83.29,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 4, ""get_block"": 7, ""get_code"": 3}"
+after,/api/remittances,36,0,185.01,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 24, ""get_block"": 7, ""get_code"": 3}"
+after,/api/transactions,23,0,120.65,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 2, ""get_block"": 13, ""get_code"": 3, ""get_logs"": 3}"
+after,/api/transactions/prepare,21,0,108.95,5.0,"{""block_number"": 1, ""chain_id"": 1, ""contract_call"": 6, ""estimate_gas"": 1, ""get_block"": 8, ""get_code"": 3, ""simulation"": 1}"

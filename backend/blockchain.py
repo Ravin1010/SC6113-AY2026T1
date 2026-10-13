@@ -1,6 +1,11 @@
 """Verified, read-only Sepolia access. No signer, private keys or send calls."""
 import hashlib
 import json
+import copy
+import time
+from collections import OrderedDict
+from threading import RLock
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 from flask import current_app, g
@@ -16,6 +21,16 @@ FIELDS = ('BLOCKCHAIN_RPC_URL', 'BLOCKCHAIN_CHAIN_ID', 'ROLE_REGISTRY_ADDRESS',
 HISTORICAL_ADDRESSES = {'0x1b6fc422422447d20af3d26aed82ab79e5520f48', '0x91c798dec35104fd1610d38a84ae89f2b94f0351'}
 NAMES = ('RoleRegistry', 'deposit_money', 'paynow')
 ZERO = '0x'+'0'*40
+
+# Process-local verified STATIC evidence only. Never a reader or wallet snapshot.
+_STATIC_TTL_SECONDS = 60
+_STATIC_LIMIT = 4
+_static_lock = RLock()
+_static_contexts = OrderedDict()
+
+def clear_verified_deployments():
+    with _static_lock:
+        _static_contexts.clear()
 
 
 class BlockchainError(Exception):
@@ -83,22 +98,88 @@ class SepoliaReader:
         if not path:
             raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Deployment evidence is not configured. Manual deployment and verification are required.')
         try:
-            self.manifest = json.loads(Path(path).read_text())
+            manifest_bytes = Path(path).read_bytes()
+            self.manifest = json.loads(manifest_bytes)
             prefix = self.manifest.get('compilerSourcePrefix', '')
             if prefix not in ('', 'contracts/'):
                 raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Unsupported compiler source-path mapping.')
             artifact = 'remix-build.json' if prefix else 'accepted-build.json'
-            self.build = json.loads((ROOT/'deployment'/artifact).read_text())
-            if self.build.get('sourcePathPrefix', '') != prefix:
-                raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Compiler source-path evidence mismatch.')
+            build_bytes = (ROOT/'deployment'/artifact).read_bytes()
+            # Content fingerprints detect changes even if size/mtime are preserved.
+            digest = hashlib.sha256()
+            digest.update(json.dumps([str(config.get(field, '')) for field in FIELDS] +
+                                     [str(Path(path).resolve()), str(ROOT.resolve()), artifact]).encode())
+            for data in [manifest_bytes, build_bytes] + [(ROOT/'contracts'/name).read_bytes() for name in
+                     ('RoleRegistry.sol', 'deposit_money.sol', 'transfer_money.sol')]:
+                digest.update(len(data).to_bytes(8, 'big'));digest.update(data)
+            self._static_key = digest.hexdigest()
         except (OSError, ValueError):
             raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Deployment evidence/build could not be read.')
         self.web3 = Web3(Web3.HTTPProvider(config['BLOCKCHAIN_RPC_URL'], request_kwargs={'timeout': 12}))
         self.block = self.web3.eth.block_number
         self.block_hash = hex_value(self.web3.eth.get_block(self.block)['hash'])
-        self.contracts = {name: self.web3.eth.contract(address=checksum(config[field]), abi=self.build['contracts'][name]['abi'])
-                          for name, field in zip(NAMES, FIELDS[2:5])}
-        self.verify()
+        # Single-flight full static verification; separate Web3/contracts/snapshot per request.
+        with _static_lock:
+            entry = _static_contexts.get(self._static_key)
+            valid = entry is not None and time.monotonic() < entry['expires']
+            if not valid:
+                _static_contexts.pop(self._static_key, None)
+            self.build = copy.deepcopy(entry['build']) if valid else json.loads(build_bytes)
+            if self.build.get('sourcePathPrefix', '') != prefix:
+                raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Compiler source-path evidence mismatch.')
+            if set(self.build['sources']) != {'contracts/RoleRegistry.sol', 'contracts/deposit_money.sol', 'contracts/transfer_money.sol'}:
+                raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Unexpected compiler source set.')
+            self.contracts = {name: self.web3.eth.contract(address=checksum(config[field]), abi=self.build['contracts'][name]['abi'])
+                              for name, field in zip(NAMES, FIELDS[2:5])}
+            try:
+                if valid:
+                    self._verify_cached_context(entry)
+                else:
+                    self.verify()
+                    # Unwired funding is not yet immutable: never cache that relationship.
+                    if self.wired:
+                        _static_contexts[self._static_key] = {
+                            'expires': time.monotonic()+_STATIC_TTL_SECONDS,
+                            'build': copy.deepcopy(self.build), 'codes': self._verified_codes.copy(),
+                            'anchors': self._deployment_anchors.copy(),
+                            'verification_block': self.block, 'verification_hash': self.block_hash,
+                            'admin': self.admin, 'starts': self.starts.copy()}
+                        while len(_static_contexts)>_STATIC_LIMIT:
+                            _static_contexts.popitem(last=False)
+            except Exception:
+                _static_contexts.pop(self._static_key, None)
+                raise
+
+    def _verify_cached_context(self, entry):
+        def require(condition, message):
+            if not condition:
+                raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', message)
+        require(self.web3.eth.chain_id == 11155111, 'RPC is not Sepolia.')
+        require(entry['verification_block'] <= self.block, 'RPC snapshot predates verified wiring.')
+        # Exact previously verified bytes, including immutable spans, checked each request.
+        for name, contract in self.contracts.items():
+            require(bytes(self.web3.eth.get_code(contract.address, block_identifier=self.block)) == entry['codes'][name],
+                    'Runtime changed since verified deployment.')
+        anchors = dict(entry['anchors'])
+        anchors[entry['verification_block']] = entry['verification_hash']
+        for number, block_hash in anchors.items():
+            require(hex_value(self.web3.eth.get_block(number)['hash']) == block_hash,
+                    'Cached deployment/wiring evidence reorganized.')
+        self.admin, self.starts, self.wired = entry['admin'], entry['starts'].copy(), True
+        self.paused = self.call('RoleRegistry', 'paused')
+        self.count = self.call('paynow', 'remittanceCount')
+        self.ensure_snapshot()
+
+    @contextmanager
+    def snapshot_batch(self):
+        """Pinned reads checked once on exit; no partially read batch may be returned."""
+        self._batch_depth = getattr(self, '_batch_depth', 0)+1
+        try:
+            yield
+        finally:
+            self._batch_depth -= 1
+            if not self._batch_depth:
+                self.ensure_snapshot()
 
     def call(self, name, function, *args):
         return getattr(self.contracts[name].functions, function)(*args).call(block_identifier=self.block)
@@ -114,11 +195,13 @@ class SepoliaReader:
             require(hashlib.sha256((ROOT/source).read_bytes()).hexdigest() == expected_hash, 'Accepted source/build mismatch; regenerate exact artifacts.')
         require(self.build['compiler'].startswith('0.8.34+commit.80d5c536') and self.build['optimizer'] == {'enabled': True, 'runs': 200} and self.build['evmVersion'] == 'shanghai', 'Compiler settings mismatch.')
         self.starts = {}
+        self._verified_codes, self._deployment_anchors = {}, {}
         for name, contract in self.contracts.items():
             evidence = manifest['contracts'][name]
             require(checksum(evidence['address']) == contract.address, 'Manifest address mismatch.')
             code = self.web3.eth.get_code(contract.address, block_identifier=self.block)
             artifact = self.build['contracts'][name]
+            self._verified_codes[name] = bytes(code)
             require(matching_runtime(code, artifact), f'{name}: code/source/settings mismatch (immutable-aware comparison).')
             tx = self.web3.eth.get_transaction(evidence['transactionHash'])
             receipt = self.web3.eth.get_transaction_receipt(evidence['transactionHash'])
@@ -133,6 +216,7 @@ class SepoliaReader:
             require(receipt['blockNumber'] == evidence['blockNumber'] and 0 <= receipt['blockNumber'] <= self.block, 'Deployment block mismatch.')
             require(hex_value(receipt['blockHash']) == hex_value(self.web3.eth.get_block(receipt['blockNumber'])['hash']), 'Deployment receipt is not canonical.')
             self.starts[name] = receipt['blockNumber']
+            self._deployment_anchors[receipt['blockNumber']] = hex_value(receipt['blockHash'])
         self.admin = self.call('RoleRegistry', 'admin')
         require(self.admin != ZERO and self.admin.lower() == manifest['admin'].lower(), 'Admin/deployer mismatch.')
         registry = self.contracts['RoleRegistry'].address
@@ -149,6 +233,8 @@ class SepoliaReader:
         require(self.block_hash == hex_value(self.web3.eth.get_block(self.block)['hash']), 'Chain changed during verification; retry.')
 
     def ensure_snapshot(self):
+        if getattr(self, '_batch_depth', 0):
+            return
         if self.block_hash != hex_value(self.web3.eth.get_block(self.block)['hash']):
             raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Verified snapshot reorganized. Retry before taking any action.')
 

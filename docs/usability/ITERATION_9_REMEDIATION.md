@@ -207,3 +207,192 @@ external warnings and public-RPC timing remain limitations requiring owner obser
 This is not hosted approval, a new usability study, a Solidity/security audit or a
 production-financial suitability claim. No main merge, Render deployment, Sepolia
 write, Turso operation or Iteration 10 work is performed.
+
+## Hosted checkpoint — deployment and unauthenticated page verified
+
+Owner manually deployed exact commit `324a0f913b432ae0b0746f5ade5128860fbf303b`.
+Render deploy `dep-db719sm7bikc7393i9u0` is **live**, finished
+13 October 2026 at 11:25:37 UTC (19:25:37 Asia/Kuala_Lumpur).
+Startup logs show Gunicorn listening on port 10000 and a worker booted; no error/
+critical entries were returned for the checked 11:24:34–11:29:03 UTC window.
+
+Independent HTTP checks: `/main` and all three changed JS assets return 200.
+Hosted `app.js`, `live.js`, `cache.js` match the approved commit byte-for-byte.
+HTML contains visible ordinary-account guidance and configured deployment ID
+`sc6113-sepolia-11884239`. Unauthenticated `/api/auth/session` returns 401
+`AUTH_REQUIRED`, as expected. This configured ID is not itself a fresh chain proof.
+
+Hosted request logs also show owner-browser authentication, `/api/users/me`,
+`/api/users/me/balances`, `/api/remittances` and `/api/transactions` returning 200.
+Those status codes establish successful requests, not independent inspection of the
+owner's wallet/role/balance payload. Wallet preflight is the next manual checkpoint.
+No wallet transaction was submitted by Work; ordinary and Smart Account create
+results, first-success confirmation count and account-switch evidence remain pending.
+
+Render retains the 6B linked branch/build/start settings; its exact-commit dashboard
+operation changed auto-deploy from on to off as documented at the deployment
+checkpoint. No environment values were edited by Work. Future deployment must be
+explicit; do not treat a documentation push as deploying this branch automatically.
+**Hosted remediation acceptance remains pending.**
+
+## Subsequent hosted observations — owner-supplied evidence
+
+The owner subsequently tested the exact deployed `324a0f913b432ae0b0746f5ade5128860fbf303b`
+commit. This supersedes the pending wallet checkpoint above; it does not replace the
+frozen participant study or imply that Work independently inspected every payload.
+
+| Test | Owner-observed result |
+|---|---|
+| Ordinary authentication | `0x890F...cFa3`, Sender/Recipient; initially available 0.001 test ETH, reserved zero |
+| Ordinary create | #10, 0.0005 test ETH; successful `Confirmed (1 confirmation)` and prominent `Remittance created — ID #10`; available/reserved each 0.0005 test ETH; #10 PENDING |
+| Account switch | Switching to `0x3e09...0442a` immediately cleared old identity; sign-in-again notice, new authentication required, then matching connected/authenticated wallet and fresh Sender/Recipient roles |
+| Smart Account create | MetaMask Smart Account/delegation enabled on Sepolia; `0x3e09...0442a` to `0x890F...cFa3`, 0.00001 test ETH, #11; `Confirmed (1 confirmation)`, prominent ID #11 and successful authoritative post-state |
+
+Ordinary creation transaction:
+`0x7adf8388b63663ba140c07ae2116c15634b18ac9be8cf629ff77e521ff90c8c3`.
+Smart Account creation transaction:
+`0x7daf5245f10607524477fc0aa85d0457382b4ae1c4a03c922d7f5d616f9ec4b6`.
+No new transaction was submitted during this performance correction.
+
+U9-01, U9-03 and U9-04 passed hosted observation. U9-02 **functional compatibility
+passed for this specific tested MetaMask/Sepolia configuration only**. This is not
+generic Smart Account support. Wallet warnings included “Unknown”, “Added protection”,
+“Malicious site” and “High-risk request”; several acknowledgements caused substantial
+wallet-side friction. Their cause is not established as a repository-controlled DApp
+defect. Do not bypass or suppress security warnings. The guidance now describes this
+limited success, prefers ordinary accounts, disclaims broader compatibility and
+instructs verification before retrying when a hash exists.
+
+U9-05 state correctness passed; hosted performance remained unacceptable. Owner-supplied
+Render log completion times (SGT): auth verification 19:49:31; `/api/users/me`
+19:49:42; balances 19:49:52; remittances 19:50:13; activity 19:50:29.
+The elapsed span is approximately 57–58 seconds, with approximate incremental waits
+of 10, 10, 21 and 16 seconds as reported. These are successive completion times,
+not isolated endpoint duration measurements. The owner subjectively reported 1–2
+minutes and 15–20 seconds before the MetaMask create-confirmation UI. The latter
+suggests preparation latency, not blockchain confirmation latency; hosted endpoint
+profiling has not independently established its exact duration.
+
+## Performance correction — diagnosis and boundary
+
+Inspection confirms `get_reader()` previously reused only Flask request-local `g`.
+Every fresh HTTP request repeated source/build checks, deployment transactions and
+receipts, constructor/deployer evidence, historical block anchors, runtime code and
+wiring checks before endpoint-specific reads. The frontend loads account, balances,
+remittances and activity sequentially. Remittance discovery also repeated the same
+pinned-block hash check for every record. This explains redundant work; public-RPC
+latency and bounded history catch-up can contribute separately. Reader construction
+does not invoke a compiler. Local fingerprinting still occurs on each request and
+was small relative to the injected RPC waits in the controlled profile.
+
+### Verified static evidence versus fresh state
+
+The cache stores **verified static evidence, never a SepoliaReader or financial
+snapshot**. It is process-local, at most four contexts, with a non-sliding 60-second
+expiry and single-flight verification. Its private SHA-256 identity includes all
+blockchain configuration fields, RPC endpoint identity, manifest path/content, build
+content/compiler settings, source content and source/build mapping. Raw RPC credentials
+are not serialized, sent to the browser or logged by the profiler. Restart, expiry,
+input change or explicit test cache reset requires complete original verification.
+
+Cold verification retains source/compiler/runtime/creation-input/deployer/constructor/
+receipt/canonical-block/wiring proofs. Only successfully **wired** deployments are
+cached. Unwired funding is deliberately never cached. Frozen exact runtime implements
+immutable Admin/registry/funding references and a permanently locked one-time trusted
+remittance reference; it has no proxy upgrade route. Those verified references may
+therefore be reused while their canonical evidence remains valid.
+
+Every warm reader remains independent and fetches:
+
+- fresh latest block number and its hash, chain ID;
+- exact current runtime bytes for all three contracts, **including immutable spans**;
+- canonical hashes for deployment blocks and the block anchoring verified wiring;
+- fresh pause and remittance count;
+- endpoint-specific roles, balances, reservations and remittances at the pinned block.
+
+Current receipt data, confirmations, canonicality, decoded events and post-state are
+not cached globally. A reorg, code mismatch, bad chain or failed revalidation fails
+closed; static verification failures evict the entry without stale fallback. Normal
+structured unavailable errors remain intact. Dynamic preparation still validates
+wallet/roles/recipient/pause/available funds, unsigned transaction contents and gas.
+
+For direct remittance list discovery, all reads remain pinned to one block. A final
+snapshot check occurs before any batch results are returned, rather than after every
+record. A changed canonical hash rejects the complete response. Participation filtering,
+newest-first ordering, pagination and financial authority remain unchanged. No browser
+refresh/polling behavior was added; navigation caching, account/session invalidation,
+one-confirmation policy, event-derived ID and verification-only retries are preserved.
+
+### Reproducible local performance characterization
+
+`scripts/profile-verified-reads.py` compares accepted checkpoint source with the new
+reader using an isolated synthetic RPC, 11 remittances, an empty-event index and 5 ms
+delay per counted RPC operation. It executes reader plus endpoint operations, not a
+real hosted HTTP/auth/Turso workload. The account request is cold and the others warm.
+
+| Operation | Before RPC calls | After RPC calls | Before/after complete static proofs |
+|---|---:|---:|---:|
+| Account | 26 | 26 | 1 / 1 |
+| Balances | 26 | 16 | 1 / 0 |
+| Remittances | 56 | 36 | 1 / 0 |
+| Activity, empty-event catch-up | 33 | 23 | 1 / 0 |
+| Prepare create | 31 | 21 | 1 / 0 |
+| Total sequence | 172 | 122 | 5 / 1 |
+
+Measured controlled sequence time was 890.48 ms before and 632.67 ms after (~29%
+reduction); preparation was 161.65 ms versus 108.95 ms (~33%). These synthetic local
+times **do not establish hosted speed improvement**. Machine-readable call breakdowns
+and readable results are in `results/iteration9_read_performance.csv` and `.md`.
+Warm preparation avoids redundant deployment transactions/receipts and immutable
+getter proofs while retaining fresh dynamic authorization, gas estimation and checks.
+
+### Final local regression evidence
+
+| Check | Final result |
+|---|---|
+| Solidity 0.8.34 compile | 3 contracts, 0 warnings |
+| Contract sanity | 10 groups, 50 expected rejections PASS |
+| I7 role boundary | 8 assertions PASS; accepted Low I7-01 unchanged |
+| Comprehensive contract evaluation | 71 scenarios, 61 expected rejections, 952 assertions, 48 model transitions PASS |
+| Generic-wrapper characterization | 4 checks PASS |
+| Python | 179 tests PASS, including 15 static-context/fresh-state regression tests |
+| Browser | 64 tests PASS, including existing 360/768/1280 px, account-switch, confirmation, verified-ID and retry checks |
+| SQLite local-chain HTTP | 14 assertions, 12 canonical indexed events; repeat unchanged PASS |
+| libSQL local-chain HTTP | 14 assertions, 12 canonical indexed events; repeat unchanged PASS |
+| Dependencies/static/scope | pip check, JS syntax and git diff --check PASS; frozen sources/schema/config/manifests/I9 evidence unchanged |
+
+The new tests exercise static single-flight reuse, distinct request readers, wallet
+separation, fresh head/roles/balance/pause/count, input invalidation, exact immutable-byte
+runtime mismatch, wrong chain, deployment/snapshot reorg rejection, TTL failure with
+no stale fallback, uncached unwired state, fresh receipts/confirmations, all dynamic
+prepare conditions and cache reset. Existing RPC failure, one-confirmation, pending-lock,
+account switch and verified-ID regressions remain passing. Ganache's native µWS binary
+is unavailable under this Node runtime; its documented JS fallback passed all checks.
+
+Additional reproducibility commands (alongside the complete suite above):
+
+```sh
+python -m unittest discover -s tests -p 'test_*.py' -q
+python scripts/profile-verified-reads.py --rpc-delay-ms 5
+```
+
+### Remaining limitations and next hosted checkpoint
+
+Conservative warm verification still needs RPC for runtime and canonical anchors;
+cold verification recurs after expiry/restart and separately per worker. A slow provider
+can still be slow. Direct scanning is low-volume O(n); historical catch-up remains
+independent and time-budgeted. Dashboard reads remain sequential. No absolute latency
+promise, generic Smart Account guarantee, production financial finality claim or new
+physical-phone result is made.
+
+After owner review and separate deployment authorization, deploy the reviewed exact
+commit without changing environment values. Use hosted read-only timing to compare
+cold/warm account, balances, remittances, Activity and unsigned preparation. Check fresh
+state, navigation reuse, explicit Refresh, unavailable/reorg failure behavior and
+guidance. Reuse existing hosted writes; no new write is needed merely to time reads.
+If a later transaction test is desired it requires a separate owner-signed checkpoint.
+
+**PERFORMANCE CORRECTION LOCALLY VERIFIED — HOSTED RE-VERIFICATION REQUIRED**
+No Render deployment, Sepolia write, Solidity/deployment/config/schema change, main
+merge or Iteration 10 work occurred during this correction. Hosted performance and
+the overall remediation freeze remain pending.

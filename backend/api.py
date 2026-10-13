@@ -265,15 +265,16 @@ def remittances():
     admin = reader.admin.lower() == g.wallet
     items = []
     matched = 0
-    for identifier in range(reader.count, 0, -1):
-        item = reader.remittance(identifier)
-        if not admin and g.wallet not in (item['sender'].lower(), item['recipient'].lower()):
-            continue
-        if matched >= offset:
-            items.append(item)
-        matched += 1
-        if len(items) == limit:
-            break
+    with reader.snapshot_batch():
+        for identifier in range(reader.count, 0, -1):
+            item = reader.remittance(identifier)
+            if not admin and g.wallet not in (item['sender'].lower(), item['recipient'].lower()):
+                continue
+            if matched >= offset:
+                items.append(item)
+            matched += 1
+            if len(items) == limit:
+                break
     return jsonify(items=items, source='verified_contract', authoritative=True,
                    discovery='direct_contract_scan', limit=limit, offset=offset)
 

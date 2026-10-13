@@ -611,7 +611,7 @@ test('targeted read cache deduplicates concurrent reads and invalidates only mat
  });assert.equal(result,3);await context.close();
 });
 test('ordinary-account guidance is visible; no speculative wallet API support added',async()=>{
- const {page,context}=await pageWithWallet();await guest(page);assert.match(await page.locator('#wallet-mode-guidance').textContent(),/standard MetaMask.*Smart Account\/delegation mode is not verified/);await context.close();
+ const {page,context}=await pageWithWallet();await guest(page);assert.match(await page.locator('#wallet-mode-guidance').textContent(),/standard MetaMask.*One Smart Account configuration succeeded.*broader compatibility is not guaranteed/);await context.close();
 });
 test('creation without the verified matching event remains locked and never guesses an ID',async()=>{
  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
