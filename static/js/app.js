@@ -2,8 +2,11 @@ import {requestAPI, friendlyError, deploymentMessages} from './api.js';
 import {walletLogin, readSession, endSession, walletConnection} from './auth.js';
 import {setupForms} from './forms.js';
 import {setupLive} from './live.js';
-import {activateCache, clearCache, cachedState, storeState, viewRead} from './cache.js';
+import {activateCache, clearCache, cachedState, storeState, viewRead, invalidateReads} from './cache.js';
 const deploymentId=document.querySelector('meta[name="deployment-id"]')?.content||'';
+const reauthKey='sc6113-reauth-required';
+function reauthRequired(){try{return sessionStorage.getItem(reauthKey)==='1';}catch{return false;}}
+function markReauth(value){try{if(value)sessionStorage.setItem(reauthKey,'1');else sessionStorage.removeItem(reauthKey);}catch{}}
 
 const byId = id => document.getElementById(id);
 let session = null, generation = 0, busy = false, historyOffset = 0;
@@ -26,6 +29,10 @@ function displaySession(value) {
   // Fail closed while refreshed identity/deployment reads are pending.
   document.querySelectorAll('[data-blockchain-action]').forEach(button => { button.disabled = true; });
   if (!value) {
+    setText('role-status','Sign in to check roles.');
+    setText('connected-wallet','Not connected');
+    setText('remittance-detail','Sign in to check remittance state.');
+    setText('transaction-status','');
     historyOffset = 0;
     byId('history-records')?.replaceChildren();
     setText('history-status', 'Sign in to view your indexed transaction history.');
@@ -110,13 +117,13 @@ async function loadHistory(ticket) {
 async function loadAccount(ticket,force=false) {
   const connection = await walletConnection();
   if(ticket!==generation || !session)return;
+  if((/^0x/i.test(connection.address)&&connection.address.toLowerCase()!==session.wallet.toLowerCase())||connection.address==='Not connected'){
+    await invalidateWallet();return;
+  }
   activateCache(session.wallet,connection.chainId,deploymentId,session.session_view_epoch??session.session_started_at);
   if(force)clearCache();
   setText('connected-wallet',connection.address);
   setText('wallet-network',connection.network);
-  if(/^0x/i.test(connection.address)&&connection.address.toLowerCase()!==session.wallet.toLowerCase()){
-    clearCache();throw new Error('Your authenticated wallet differs from the connected wallet. Sign in again.');
-  }
   if(!['/main','/depositMoney','/transferMoney'].includes(window.location.pathname))return;
   const cached=cachedState();
   if(cached){setText('snapshot-status','Reusing a blockchain presentation snapshot. Refresh to check changes made by other wallets.');await Promise.all([live.set(cached.account,cached.balances,connection),loadHistory(ticket)]);return;}
@@ -137,6 +144,7 @@ async function restoreState() {
   try {
     const current = await readSession();
     if (ticket !== generation) return;
+    if(reauthRequired()){displaySession(null);notice('Wallet changed. Authenticate again before continuing.',true);return;}
     displaySession(current);
     await loadAccount(ticket);
   } catch (error) {
@@ -153,7 +161,7 @@ byId('login').addEventListener('click', async () => {
   try {
     const current = await walletLogin(() => ticket === generation);
     if (ticket !== generation) return;
-    clearCache(); displaySession(current); notice('Wallet session authenticated. Checking deployment and permissions…');
+    markReauth(false);clearCache(); displaySession(current); notice('Wallet session authenticated. Checking deployment and permissions…');
     await loadAccount(ticket);
   } catch (error) { if (ticket === generation) handleError(error); }
   finally { setBusy(false); }
@@ -198,25 +206,57 @@ let refreshing=null;
 async function refreshSelective(options) {
   if(options?.history)return loadHistory(generation);
   if(!refreshing)refreshing=(async()=>{
-    clearCache();live.invalidate();
-    const ticket=++generation;
-    await loadAccount(ticket);
+    const previous=cachedState(),expected=session;
+    if(options?.confirmed && previous && expected){
+      const action=options.action;
+      const financial=['deposit','withdraw','transfer','claim','cancel'].includes(action);
+      const admin=!financial;
+      const rolePath=options.args?.wallet?'/api/users/roles/'+encodeURIComponent(options.args.wallet.toLowerCase()):null;
+      const detailPath=options.args?.remittance_id?'/api/remittances/'+encodeURIComponent(options.args.remittance_id):null;
+      invalidateReads(path=>path.startsWith('/api/transactions')||(['transfer','claim','cancel'].includes(action)&&(path.startsWith('/api/remittances?')||path===detailPath))||(admin&&path===rolePath));
+      live.invalidate();const ticket=++generation;
+      setText('snapshot-status','Refreshing affected authoritative state…');
+      let account=previous.account,balances=previous.balances;
+      if(admin){
+        account=await requestAPI('/api/users/me');
+        if(account.wallet.toLowerCase()!==expected.wallet.toLowerCase()||account.roles?.source!=='verified_contract'||account.roles.available!==true||account.deployment?.deployment_verified!==true)throw new Error('Authoritative role/pause refresh unavailable.');
+        balances={...balances,deployment:account.deployment};
+      }else balances=await requestAPI('/api/users/me/balances');
+      if(ticket!==generation||session!==expected)return;
+      const connection=await walletConnection();
+      if(ticket!==generation||session!==expected)return;
+      if(connection.address.toLowerCase()!==expected.wallet.toLowerCase()){await invalidateWallet();return;}
+      storeState(account,balances,{preserveReads:true});
+      await live.set(account,balances,connection,{list:['transfer','claim','cancel'].includes(action)});
+      if(ticket===generation){await loadHistory(ticket);setText('snapshot-status','Affected state checked. Refresh checks external changes.');}
+    }else{
+      clearCache();live.invalidate();const ticket=++generation;await loadAccount(ticket);
+    }
   })().finally(()=>{refreshing=null;});
   return refreshing;
 }
 
 const live = setupLive(() => session, handleError, refreshSelective);
 setupForms(() => session?.wallet || '', () => live.isSending());
-window.ethereum?.on?.('accountsChanged', async () => {
-  const old = session; generation++; clearCache(); displaySession(null);
-  notice('Your selected wallet changed. Sign in again with the intended account.', true);
-  if (old) { try { await endSession(old.csrf_token); } catch (error) { if (error.code !== 'AUTH_REQUIRED') notice(`Wallet changed. ${friendlyError(error)} Log out again or retry before continuing.`, true); } }
+async function invalidateWallet(){
+  const old=session;markReauth(true);generation++;clearCache();displaySession(null);
+  notice('Your selected wallet changed or disconnected. Sign in again with the intended account.',true);
+  if(old){
+    setBusy(true);
+    try{await endSession(old.csrf_token);}catch(error){if(error.code!=='AUTH_REQUIRED')notice(`Wallet changed. Session invalidation failed: ${friendlyError(error)} Retry before continuing.`,true);}
+    finally{setBusy(false);}
+  }
+}
+window.ethereum?.on?.('accountsChanged',async accounts=>{
+  if(!session)return; // Login itself verifies the selected account before and after signing.
+  if(accounts?.[0]?.toLowerCase()===session.wallet.toLowerCase())return;
+  await invalidateWallet();
 });
-window.ethereum?.on?.('chainChanged', async () => {
-  // A network change invalidates the entire read context, even during a send.
-  generation++; clearCache(); live.invalidate();
-  if(restoring) await restoring;
-  if(session) await restore();
+window.ethereum?.on?.('disconnect',invalidateWallet);
+window.ethereum?.on?.('chainChanged',async()=>{
+  generation++;clearCache();live.invalidate();
+  if(restoring)await restoring;
+  if(session)await restore();
 });
 // Focus/navigation does not invalidate verified deployment or financial reads.
 // Revalidate only the session after returning from another tab/browser history.

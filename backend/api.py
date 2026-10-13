@@ -359,6 +359,10 @@ def receipt(tx_hash):
         wallet_related = str(result['from']).lower() == g.wallet or participant
         if not deployment_related or (not wallet_related and not reader.user(g.wallet)['admin']):
             raise APIError(403, 'TRANSACTION_ACCESS_DENIED', 'Receipt is not for this wallet/deployment.')
+    result['confirmations_required'] = max(1, int(current_app.config['BLOCKCHAIN_CONFIRMATIONS']))
+    if result.get('status') in ('CONFIRMED', 'FAILED') and (
+            result.get('canonical') is not True or result.get('confirmations', 0) < result['confirmations_required']):
+        result['status'] = 'PENDING_VERIFICATION'
     result['activity_indexed'] = index_receipt(reader, result)
     return jsonify(result)
 

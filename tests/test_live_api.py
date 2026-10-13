@@ -84,3 +84,27 @@ class LiveAPITests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/transactions/'+tx_hash+'/receipt').status_code,200)
 
 if __name__=='__main__':unittest.main()
+
+class RemediationReceiptPolicyTests(unittest.TestCase):
+    setUp = LiveAPITests.setUp
+
+    def test_zero_one_and_later_confirmation_policy(self):
+        self.assertEqual(self.app.config['BLOCKCHAIN_CONFIRMATIONS'],1)
+        for count,status in [(0,'PENDING_VERIFICATION'),(1,'CONFIRMED'),(2,'CONFIRMED')]:
+            with self.subTest(count=count):
+                self.reader.receipt=lambda _,c=count:{'transaction_hash':'0x'+'a'*64,'from':self.account.address,
+                    'to':self.reader.contracts['paynow'].address,'status':'CONFIRMED','canonical':True,
+                    'confirmations':c,'deployment_logs':[]}
+                result=self.client.get('/api/transactions/0x'+'a'*64+'/receipt')
+                self.assertEqual(result.status_code,200);self.assertEqual(result.json['status'],status)
+                self.assertEqual(result.json['confirmations_required'],1)
+
+    def test_noncanonical_receipt_does_not_complete(self):
+        self.reader.receipt=lambda _:{'from':self.account.address,'to':self.reader.contracts['paynow'].address,
+            'status':'CONFIRMED','canonical':False,'confirmations':20,'deployment_logs':[]}
+        self.assertEqual(self.client.get('/api/transactions/0x'+'a'*64+'/receipt').json['status'],'PENDING_VERIFICATION')
+
+    def test_account_logout_revokes_session_and_old_csrf(self):
+        self.assertEqual(self.client.post('/api/auth/logout',json={},headers=self.csrf).status_code,200)
+        self.assertEqual(self.client.get('/api/auth/session').status_code,401)
+        self.assertEqual(self.client.get('/api/users/me/balances').status_code,401)

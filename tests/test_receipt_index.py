@@ -100,7 +100,7 @@ class ReceiptIndexTests(unittest.TestCase):
 
     def test_unconfirmed_noncanonical_or_failed_receipts_not_indexed(self):
         tx_hash, _ = self.receipt();client = self.client()
-        self.reader.block = 5;self.reader.block_hash = Web3.to_hex(baseline.HASH(5))
+        self.reader.block = 3;self.reader.block_hash = Web3.to_hex(baseline.HASH(3))
         self.assertFalse(self.verify(client, tx_hash).json['activity_indexed'])
         self.reader.block = 20;self.reader.block_hash = Web3.to_hex(baseline.HASH(20))
         self.receipts[tx_hash]['status'] = 0
@@ -143,3 +143,12 @@ class ReceiptIndexTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json['items']), 1)
         self.assertEqual(len(response.json['items'][0]['events']), 2)
+
+    def test_one_canonical_confirmation_indexes_receipt_without_checkpoint_advance(self):
+        tx_hash, _ = self.receipt();client = self.client()
+        self.reader.block = 4;self.reader.block_hash = Web3.to_hex(baseline.HASH(4))
+        response=self.verify(client,tx_hash)
+        self.assertEqual(response.json['confirmations'],1)
+        self.assertEqual(response.json['status'],'CONFIRMED')
+        self.assertTrue(response.json['canonical']);self.assertTrue(response.json['activity_indexed'])
+        self.assertEqual(get_db().execute('SELECT COUNT(*) FROM indexing_state').fetchone()[0],0)

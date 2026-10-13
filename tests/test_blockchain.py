@@ -208,7 +208,7 @@ class BlockchainTests(unittest.TestCase):
         result=index_events(self.reader);index_events(self.reader)
         db=get_db();self.assertEqual(db.execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0],1)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM indexed_transactions').fetchone()[0],1)
-        self.assertEqual(result['confirmed_head'],15)
+        self.assertEqual(result['confirmed_head'],20)
         self.assertTrue(all(query['fromBlock']>=self.reader.starts[next(name for name,c in self.reader.contracts.items() if c.address==query['address'])] for query in queries))
         event=db.execute('SELECT * FROM indexed_events').fetchone();self.assertEqual(event['remittance_id'],'1');self.assertEqual(event['log_index'],0);self.assertEqual(event['block_hash'],Web3.to_hex(HASH(4)))
         self.assertEqual(json.loads(event['payload_json'])['args']['recipient'],RECIPIENT)
@@ -217,7 +217,8 @@ class BlockchainTests(unittest.TestCase):
         self.event();index_events(self.reader)
         self.eth.get_logs=lambda query:[]
         original=self.eth.get_block
-        self.eth.get_block=lambda n:{'hash':HASH(444)} if n==15 else original(n)
+        self.eth.get_block=lambda n:{'hash':HASH(444)} if n==20 else original(n)
+        self.reader.block_hash=Web3.to_hex(HASH(444))
         result=index_events(self.reader)
         self.assertTrue(result['reconciled_reset']);self.assertEqual(get_db().execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0],0)
 
@@ -228,7 +229,7 @@ class BlockchainTests(unittest.TestCase):
         self.assertEqual(get_db().execute("SELECT COUNT(*) FROM indexing_state WHERE contract_address=?",(ADDRESSES['paynow'].lower(),)).fetchone()[0],0)
 
     def test_unconfirmed_log_not_indexed(self):
-        self.event(block=19);index_events(self.reader)
+        self.event(block=21);index_events(self.reader)
         self.assertEqual(get_db().execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0],0)
 
     def test_receipt_canonical_success_and_confirmations(self):

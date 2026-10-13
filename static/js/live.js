@@ -3,6 +3,7 @@ import {requestAPI, postJSON, friendlyError} from './api.js';
 import {validationMessage} from './forms.js';
 import {viewRead} from './cache.js';
 const chain = '0xaa36a7';
+const confirmationsRequired=1;
 const adminActions = ['authorizeSender','authorizeRecipient','revokeRole','pause','unpause'];
 const contractFor = {authorizeSender:'RoleRegistry',authorizeRecipient:'RoleRegistry',revokeRole:'RoleRegistry',pause:'RoleRegistry',unpause:'RoleRegistry',deposit:'deposit_money',withdraw:'deposit_money',transfer:'paynow',claim:'paynow',cancel:'paynow'};
 const text = (id,value) => { const element=document.getElementById(id); if(element) element.textContent=value; };
@@ -13,6 +14,7 @@ export function setupLive(getSession, onError, refresh) {
   const pendingKey=(wallet,deployment)=>`sc6113-pending:${wallet.toLowerCase()}:${chain}:${deployment}`;
   function savePending(){try{sessionStorage.setItem(pendingKey(pending.wallet,pending.deployment),JSON.stringify(pending));}catch{}}
   function reportPending(message,retry=false){
+    if(!pending||getSession()?.wallet.toLowerCase()!==pending.wallet)return;
     const button=buttons().find(button=>button.dataset.blockchainAction===pending.action);
     const output=button?.closest('form')?.querySelector('.form-result')||document.getElementById('transaction-status')||document.querySelector('.form-result');
     if(!output)return;
@@ -39,7 +41,8 @@ export function setupLive(getSession, onError, refresh) {
           if(error.code==='AUTH_REQUIRED')onError(error);
           return;
         }
-        if(receipt.canonical===true&&receipt.confirmations>=6){
+        if(pending!==operation||getSession()!==session)return;
+        if(receipt.canonical===true&&receipt.confirmations>=confirmationsRequired){
           if(receipt.status==='FAILED'){
             reportPending('Transaction reverted:');completePending();await evaluate();return;
           }
@@ -48,11 +51,21 @@ export function setupLive(getSession, onError, refresh) {
             await refreshAffected(operation.action,operation.args,session);
             if(pending!==operation||getSession()!==session)return;
             if(!basic())throw new Error('Authoritative post-transaction state is temporarily unavailable.');
-            reportPending(`Confirmed (${receipt.confirmations} confirmations):`);
+            if(operation.action==='transfer'){
+              const events=(receipt.deployment_logs||[]).filter(log=>log.contract==='paynow'&&log.event==='RemittanceCreated'&&log.args?.sender?.toLowerCase()===operation.wallet&&log.args?.recipient?.toLowerCase()===operation.args.wallet.toLowerCase()&&String(log.args.amount)===String(operation.args.amount_wei));
+              if(events.length!==1||!/^[1-9][0-9]*$/.test(String(events[0].args.remittanceId)))throw new Error('Verified creation event unavailable.');
+              const id=String(events[0].args.remittanceId);
+              const item=await lookup('/api/remittances/'+encodeURIComponent(id));
+              if(item.source!=='verified_contract'||item.authoritative!==true||item.sender.toLowerCase()!==operation.wallet||item.recipient.toLowerCase()!==operation.args.wallet.toLowerCase()||String(item.amount.wei)!==String(operation.args.amount_wei))throw new Error('Created remittance post-state unavailable.');
+              if(pending!==operation||getSession()!==session)return;
+              reportPending(`Confirmed (${receipt.confirmations} ${receipt.confirmations===1?'confirmation':'confirmations'}). Transaction hash:`);
+              const output=buttons().find(button=>button.dataset.blockchainAction==='transfer')?.closest('form')?.querySelector('.form-result');
+              if(output){const heading=document.createElement('strong');heading.textContent=`Remittance created — ID #${id}`;output.prepend(heading,document.createElement('br'));}
+            }else reportPending(`Confirmed (${receipt.confirmations} ${receipt.confirmations===1?'confirmation':'confirmations'}):`);
             completePending();await evaluate();return;
           }
         }
-        reportPending(`Transaction submitted. Confirmation pending (${receipt.confirmations||0}/6):`,true);
+        reportPending(`Transaction submitted. Confirmation pending (${receipt.confirmations||0}/${confirmationsRequired}):`,true);
       }
       reportPending('Transaction submitted. Verification is still pending; check authoritative state again.',true);
     }catch(error){
