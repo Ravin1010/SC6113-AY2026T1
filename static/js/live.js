@@ -124,6 +124,7 @@ export function setupLive(getSession, onError, refresh) {
     text('deployment-detail',`Deployment ${deployment.deployment_id} · verified at block ${deployment.block_number} · Admin ${deployment.admin}`);
     text('available-balance',`${balances.available.test_eth} test ETH (${balances.available.wei} wei)`);
     text('reserved-balance',`${balances.reserved.test_eth} test ETH (${balances.reserved.wei} wei)`);
+    text('remittance-detail','Enter a remittance ID. Current status and participant permission will be checked when you click Claim or Cancel.');
     await evaluate();
     if(list)await refreshList();
   }

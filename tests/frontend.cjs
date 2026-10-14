@@ -751,3 +751,13 @@ test('deferred Activity evidence storage failure cannot undo confirmed financial
   assert.ok((await page.locator('#deposit-result').textContent()).includes('Confirmed (1 confirmation)'));
   assert.ok((await page.locator('#available-balance').textContent()).includes('1 test ETH'));assert.equal(await page.evaluate(()=>window.__sendCount),1);await context.close();
 });
+
+test('authenticated verified remittance hint replaces sign-in text without remote eligibility reads',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);let detail=0,roles=0;
+  page.on('request',request=>{const p=new URL(request.url()).pathname;if(/\/api\/remittances\/\d+$/.test(p))detail++;if(p.startsWith('/api/users/roles/'))roles++;});
+  await guest(page,'/transferMoney');assert.ok((await page.locator('#remittance-detail').textContent()).includes('Sign in'));
+  await login(page);assert.equal(await page.locator('#remittance-detail').textContent(),'Enter a remittance ID. Current status and participant permission will be checked when you click Claim or Cancel.');
+  await page.locator('#remittance-id').fill('1');await waitFor(()=>page.locator('[data-blockchain-action="claim"]').isEnabled());
+  assert.equal(detail,0);assert.equal(roles,0);assert.ok(!(await page.locator('#remittance-detail').textContent()).includes('Sign in'));
+  await page.locator('#logout').click();await waitFor(()=>page.locator('#login').isVisible());assert.ok((await page.locator('#remittance-detail').textContent()).includes('Sign in'));await context.close();
+});

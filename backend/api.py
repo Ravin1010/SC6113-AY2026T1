@@ -235,7 +235,7 @@ def me():
 @api.get('/users/me/balances')
 @authenticated
 def balances():
-    return jsonify(get_reader().balances(g.wallet))
+    return jsonify(get_reader(read_mode='balance').balances(g.wallet))
 
 
 @api.get('/users/roles/<address>')
@@ -404,4 +404,4 @@ def audit():
 def prepare_transaction():
     csrf_check()
     value = body(('action', 'arguments'))
-    return jsonify(prepare(get_reader(), g.wallet, value['action'], value['arguments'], wallet))
+    return jsonify(prepare(get_reader(read_mode='prepare'), g.wallet, value['action'], value['arguments'], wallet))

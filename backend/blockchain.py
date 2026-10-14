@@ -111,9 +111,12 @@ def eth_amount(wei):
 
 
 class SepoliaReader:
-    def __init__(self, config, *, receipt_only=False):
+    def __init__(self, config, *, receipt_only=False, read_mode='generic'):
         self.config = config
         self.receipt_only = receipt_only
+        if read_mode not in ('generic','prepare','balance'):
+            raise ValueError('Unsupported verified reader mode')
+        self.read_mode = read_mode
         path = config.get('BLOCKCHAIN_MANIFEST_PATH')
         if not path:
             raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Deployment evidence is not configured. Manual deployment and verification are required.')
@@ -136,8 +139,11 @@ class SepoliaReader:
         except (OSError, ValueError):
             raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Deployment evidence/build could not be read.')
         self.web3 = Web3(VerifiedBatchProvider(config['BLOCKCHAIN_RPC_URL'], request_kwargs={'timeout': 12}))
-        self.block = self.web3.eth.block_number
-        self.block_hash = hex_value(self.web3.eth.get_block(self.block)['hash'])
+        latest = self.web3.eth.get_block('latest')
+        self.block = latest['number']
+        if type(self.block) is not int or self.block < 0 or len(latest['hash']) != 32:
+            raise BlockchainError('BLOCKCHAIN_DEPLOYMENT_UNVERIFIED', 'Invalid latest block snapshot.')
+        self.block_hash = hex_value(latest['hash'])
         # Single-flight full static verification; separate Web3/contracts/snapshot per request.
         with _static_lock:
             entry = _static_contexts.get(self._static_key)
@@ -181,9 +187,10 @@ class SepoliaReader:
         # Runtime/deployment history/wiring are immutable evidence, revalidated at TTL.
         # Fresh chain identity, current snapshot, financial state and receipts stay live.
         self.admin, self.starts, self.wired = entry['admin'], entry['starts'].copy(), True
-        if not self.receipt_only:
+        if not self.receipt_only and self.read_mode=='generic':
             self.paused, self.count = self.calls([('RoleRegistry', 'paused', ()), ('paynow', 'remittanceCount', ())])
-        self.ensure_snapshot()
+        if self.read_mode=='generic':
+            self.ensure_snapshot()
 
     @contextmanager
     def snapshot_batch(self):
@@ -279,7 +286,7 @@ class SepoliaReader:
         trusted = self.call('deposit_money', 'remittanceContract')
         require(trusted in (ZERO, transfer), 'Funding is permanently wired to another address.')
         self.wired = trusted == transfer
-        if not getattr(self, 'receipt_only', False):
+        if not getattr(self, 'receipt_only', False) and getattr(self,'read_mode','generic')=='generic':
             self.paused = self.call('RoleRegistry', 'paused')
             self.count = self.call('paynow', 'remittanceCount')
         require(self.block_hash == hex_value(self.web3.eth.get_block(self.block)['hash']), 'Chain changed during verification; retry.')
@@ -307,8 +314,11 @@ class SepoliaReader:
         return result
 
     def balances(self, wallet):
-        available, reserved = self.calls([('deposit_money', 'availableBalance', (checksum(wallet),)),
-                                          ('deposit_money', 'reservedBalance', (checksum(wallet),))])
+        requests=[('deposit_money', 'availableBalance', (checksum(wallet),)), ('deposit_money', 'reservedBalance', (checksum(wallet),))]
+        if getattr(self,'read_mode','generic')=='balance':
+            available,reserved,self.paused,self.count=self.calls(requests+[('RoleRegistry','paused',()),('paynow','remittanceCount',())])
+        else:
+            available,reserved=self.calls(requests)
         result = {'source': 'verified_contract', 'authoritative': True, 'block_number': self.block,
                 'available': eth_amount(available), 'reserved': eth_amount(reserved), 'deployment': self.state()}
         self.ensure_snapshot()
@@ -363,14 +373,14 @@ class SepoliaReader:
                 'source': 'verified_rpc', 'deployment_logs': logs}
 
 
-def get_reader(*, receipt_only=False):
+def get_reader(*, receipt_only=False, read_mode='generic'):
     if 'blockchain_reader' in g:
         return g.blockchain_reader
     state = configuration_status()
     if not state['configured']:
         raise BlockchainError('BLOCKCHAIN_NOT_CONFIGURED', 'Verified evolved Sepolia deployment configuration is incomplete or invalid.')
     try:
-        reader = SepoliaReader(current_app.config, receipt_only=receipt_only)
+        reader = SepoliaReader(current_app.config, receipt_only=receipt_only, read_mode=read_mode)
     except BlockchainError:
         raise
     except (KeyError, TypeError, ValueError, OSError):

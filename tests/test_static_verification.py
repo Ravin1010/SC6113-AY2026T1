@@ -29,7 +29,10 @@ class World:
             def get_code(self,*a,**kw):world.hit('get_code');return world.eth.get_code(*a,**kw)
             def get_transaction(self,*a):world.hit('get_transaction');return world.eth.get_transaction(*a)
             def get_transaction_receipt(self,*a):world.hit('get_transaction_receipt');return world.eth.get_transaction_receipt(*a)
-            def get_block(self,*a):world.hit('get_block');return world.eth.get_block(*a)
+            def get_block(self,*a):
+                world.hit('get_block')
+                number=world.head if a[0]=='latest' else a[0]
+                return {**world.eth.get_block(number),'number':number}
             def get_logs(self,*a):world.hit('get_logs');return world.eth.get_logs(*a)
             def call(self,*a,**kw):world.hit('simulation');return world.eth.call(*a,**kw)
             def estimate_gas(self,*a,**kw):world.hit('estimate_gas');return world.eth.estimate_gas(*a,**kw)
@@ -77,10 +80,38 @@ class StaticVerificationTests(unittest.TestCase):
         self.reader();self.world.counter.clear()
         reader=b.SepoliaReader(self.world.config,receipt_only=True)
         self.assertEqual(self.world.counter['contract_call'],0)
-        self.assertEqual(self.world.counter['block_number'],1)
+        self.assertEqual(self.world.counter['block_number'],0)
         self.assertEqual(self.world.counter['chain_id'],1)
         self.assertEqual(self.world.counter['get_block'],2)
         self.assertFalse(hasattr(reader,'paused'));self.assertFalse(hasattr(reader,'count'))
+    def test_narrow_prepare_bootstrap_latest_header_without_eager_dynamic_reads(self):
+        self.reader();self.world.counter.clear()
+        reader=b.SepoliaReader(self.world.config,read_mode='prepare')
+        self.assertEqual(reader.block,20)
+        self.assertEqual(self.world.counter['block_number'],0)
+        self.assertEqual(self.world.counter['get_block'],1)
+        self.assertEqual(self.world.counter['chain_id'],1)
+        self.assertEqual(self.world.counter['contract_call'],0)
+        self.assertFalse(hasattr(reader,'paused'))
+    def test_narrow_prepare_final_fence_rejects_reorg_after_simulation(self):
+        self.reader();reader=b.SepoliaReader(self.world.config,read_mode='prepare')
+        actual=self.world.eth.get_block
+        def estimate(*args,**kwargs):
+            self.world.eth.get_block=lambda n:{'hash':old.HASH(999)} if n==20 else actual(n)
+            return 50000
+        self.world.eth.estimate_gas=estimate
+        with self.assertRaises(b.BlockchainError):prepare(reader,old.SENDER,'transfer',{'wallet':old.RECIPIENT,'amount_wei':'1'},lambda value:value)
+    def test_latest_header_malformed_number_fails_closed(self):
+        self.reader();actual=self.world.rpc.eth.get_block
+        self.world.rpc.eth.get_block=lambda n:{'number':'20','hash':old.HASH(20)} if n=='latest' else actual(n)
+        with self.assertRaises(b.BlockchainError):self.reader()
+    def test_narrow_balance_uses_fresh_values_and_rejects_reorg(self):
+        self.reader();self.world.available[old.SENDER.lower()]=4
+        reader=b.SepoliaReader(self.world.config,read_mode='balance')
+        self.assertFalse(hasattr(reader,'count'))
+        self.assertEqual(reader.balances(old.SENDER)['available']['wei'],'4')
+        self.world.eth.get_block=lambda n:{'hash':old.HASH(999)}
+        with self.assertRaises(b.BlockchainError):reader.balances(old.SENDER)
     def test_dynamic_wallet_balance_pause_count_and_head_fresh(self):
         a=self.reader();self.world.head=21;self.world.values[('RoleRegistry','paused')]=True
         self.world.values[('paynow','remittanceCount')]=2;self.world.available[old.SENDER.lower()]=7

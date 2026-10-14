@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
 from app import create_app
-from backend.blockchain import get_reader
+from backend.blockchain import get_reader, SepoliaReader
 from backend.indexer import index_events
 from backend.database import get_db
 from backend.preparation import prepare
@@ -46,4 +46,7 @@ with app.test_request_context():
     assert before>=10
     index_events(reader);assert get_db().execute('SELECT COUNT(*) FROM indexed_events').fetchone()[0]==before
     assert prepare(reader,value['sender'],'withdraw',{'amount_wei':'1'},lambda a:a)['unsigned']
-    print(f'Local HTTP integration ({os.getenv("LOCAL_DB_DRIVER", "sqlite3")}): 14 assertions passed; {before} canonical events indexed, repeat run unchanged. No Sepolia access.')
+    assert SepoliaReader(app.config,read_mode='balance').balances(value['sender'])['available']['wei']==str(2*10**15)
+    assert prepare(SepoliaReader(app.config,read_mode='prepare'),value['sender'],'withdraw',{'amount_wei':'1'},lambda a:a)['unsigned']
+    assert prepare(SepoliaReader(app.config,read_mode='prepare'),value['sender'],'transfer',{'wallet':value['recipient'],'amount_wei':'1'},lambda a:a)['unsigned']
+    print(f'Local HTTP integration ({os.getenv("LOCAL_DB_DRIVER", "sqlite3")}): 17 assertions passed; {before} canonical events indexed, repeat run unchanged. No Sepolia access.')

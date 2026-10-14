@@ -846,3 +846,154 @@ edit or Iteration 10 work occurred in this pass.
 
 **FINAL PERFORMANCE/PRESENTATION CORRECTION LOCALLY VERIFIED — FINAL HOSTED VERIFICATION REQUIRED**
 The remediation is not frozen yet; this is ready for final owner review.
+
+## Final latency correction — accepted checkpoint 8fdb117
+
+Baseline: `8fdb117e33cebdad69784938408f45e204984f26`, on
+`feature/iteration-9-usability-remediation`. The preceding corrections are retained.
+This section records a local correction, not another hosted deployment or test.
+
+### Latest owner-supplied hosted evidence
+
+Render checked out that exact baseline. Owner-supplied SGT completion timestamps:
+
+| Response | Completion | Interpretation |
+|---|---|---|
+| Authentication verification | 17:07:07.580 | Start of dashboard interval |
+| Account | 17:07:17.306 | About 9.7 seconds after authentication |
+| Balances | 17:07:20.087 | About 2.8 seconds additional |
+| Remittances | 17:07:22.589 | Primary authoritative presentation ready about 15.0 seconds after authentication |
+| Cached Activity | 17:07:24.807 | About 2.2 seconds additional; full presentation about 17.2 seconds |
+
+This supports the accepted nonblocking Activity behavior. An authenticated verified
+Claim/Cancel panel nevertheless retained “Sign in to check remittance state.” This
+was stale text, not failed authorization. The owner observed approximately 12 seconds
+from an action click to MetaMask across transaction types. Deposit page/session
+completion at 17:07:47.877 and preparation completion at 17:07:55.976 give an approximately
+8.1-second **completion-to-completion gap**, not an exact endpoint duration.
+Deferred receipt completions were 17:08:13.498 and 17:08:16.930; fresh balances completed
+17:08:25.553. The latter approximately 8.6-second gap is application/RPC post-state
+work, not blockchain mining time. These observations are owner-supplied evidence;
+this correction makes no new hosted timing claim.
+
+### Diagnosis and bounded implementation
+
+The warm generic bootstrap selected a head using `eth_blockNumber`, fetched that
+block separately, fetched pause/count, and fenced initialization before endpoint work.
+Preparation then fetched action-specific state and eventually fenced again. Some
+single-contract calls also triggered Web3 middleware chain checks. These transport
+sequences remained expensive despite the accepted static-proof cache.
+
+A single `eth_getBlockByNumber("latest", false)` now supplies both the selected number
+and hash. The header shape is validated; all subsequent dynamic calls use the exact
+selected block. Fresh chain identity remains a separate check. Narrow `prepare` and
+`balance` reader modes defer eager generic state and initialization fencing to their
+operation, which must finish with the existing same-block hash fence before returning.
+Cold full static verification still performs its own verification/fence.
+
+Warm preparation now has exactly these five transports in the controlled Web3 path:
+
+1. Latest block header: select exact block number/hash.
+2. Fresh chain ID: require the configured verified Sepolia identity.
+3. Same-block dynamic validation batch: pause/count plus applicable Sender/Recipient,
+   available balance, target role, or exact remittance/reservation. Count is retained
+   for compatible deployment response metadata, without another transport.
+4. Same-block batch containing **both** `eth_call` simulation and `eth_estimateGas`.
+5. Final selected-block hash read: reject a changed canonical snapshot before returning.
+
+The original action checks and unsigned from/to/data/value construction remain intact.
+The batch cache belongs only to this request/reader. No role, pause, balance,
+remittance or confirmation state is cached globally. Invalid, missing, duplicate,
+error or malformed batch results remain fail-closed. A reverting direct getter in a
+validation batch can produce a structured unavailable rejection before the ordinary
+argument/status error; it cannot produce an unsigned transaction or partial success.
+The static-proof TTL remains 60 seconds, non-sliding; expiry, restart/clear and
+configuration/source/build/manifest changes still force full proof. Failed proof is
+not bypassed. Runtime identity, immutable wiring and deployment evidence are unchanged.
+
+The narrow balance path uses four transports: latest header, fresh chain identity,
+one batch of available/reserved/pause/count at that block, and a final hash fence.
+This preserves existing response metadata and fresh financial authority while removing
+separate generic initialization. Receipt data does not substitute for balance state.
+Exact remittance/event-derived ID, terminal post-state, resulting roles/pause and safe
+verification-only retry remain the existing confirmation requirements. Activity still
+cannot gate confirmation. Other generic endpoints retain their behavior.
+
+Authenticated verified presentation now locally says:
+“Enter a remittance ID. Current status and participant permission will be checked when
+you click Claim or Cancel.” Logout restores the sign-in guidance. No remote eligibility
+lookup was restored and backend preparation remains the final authoritative gate.
+
+### Controlled before/after evidence
+
+Reproduce with:
+`/tmp/sc6113-last-venv/bin/python scripts/profile-last-latency.py`
+(or a normal project virtual environment with the pinned requirements).
+The utility compares the exact accepted baseline against the working implementation,
+using real Web3 HTTP middleware/ABI processing with an in-memory synthetic RPC and
+5 ms delay per HTTP envelope. Static proof is warmed; no public RPC or secret is used.
+The artifact records actual wire messages, including middleware-generated chain checks.
+This explains why some baseline paths measure ten transports rather than the earlier
+approximate eight. The synthetic elapsed times include local processing overhead and
+are not estimates or measurements of hosted performance.
+
+| Action | Logical RPC messages before → after | Transports before → after | Synthetic ms before → after |
+|---|---:|---:|---:|
+| transfer | 12 → 10 | 8 → 5 | 59.15 → 42.02 |
+| deposit | 12 → 8 | 10 → 5 | 65.48 → 38.83 |
+| withdraw | 12 → 8 | 10 → 5 | 65.80 → 38.11 |
+| claim | 11 → 9 | 8 → 5 | 58.35 → 39.02 |
+| cancel | 11 → 9 | 8 → 5 | 55.78 → 40.10 |
+| authorizeSender | 12 → 8 | 10 → 5 | 64.98 → 37.54 |
+| pause | 9 → 7 | 7 → 5 | 49.33 → 37.91 |
+| authoritative balances | 9 → 7 | 7 → 4 | 50.90 → 32.69 |
+
+Detailed results: `results/iteration9_last_latency.csv` and
+`results/iteration9_last_latency.md`; utility: `scripts/profile-last-latency.py`.
+Cold proof cost is intentionally outside this warm comparison. Results demonstrate
+fewer serialized transports while retaining the checks, not a promise of hosted seconds.
+
+### Final local regression evidence
+
+- Solidity 0.8.34: three deployable contracts; zero compiler warnings.
+- Contract sanity: 10 groups, 50 expected rejection checks.
+- Iteration 7 role boundary: 8 assertions; accepted Low I7-01 remains unchanged.
+- Comprehensive contracts: 71 scenario checks, 61 expected rejections, 952 assertions,
+  48 seeded model transitions; ten deterministic gas measurements.
+- Wallet characterization: 4 checks; no new Smart Account compatibility claim.
+- Python: **208 tests passed**.
+- Browser: **81 tests passed**.
+- SQLite local HTTP chain integration: **17 assertions**, 12 canonical indexed events,
+  repeat idempotent run. libSQL: **17 assertions**, same 12 events and idempotence.
+- Dependency consistency, JavaScript syntax and `git diff --check`: passed.
+
+New coverage exercises all ten same-block preparation batches; fresh invalid
+Sender/Recipient, balance, pause, terminal/participant/Admin conditions; malformed
+latest headers; final preparation/balance reorg rejection; fresh narrow balance state;
+and the exact guest → authenticated verified → logout hint transition with no remote
+eligibility lookup. Existing malformed/partial/duplicate batch, TTL/input invalidation,
+receipt canonicality/one-confirmation, pending-hash, account-switch, action-specific
+post-state and nonblocking Activity tests remain in the complete passing suites.
+Real HTTP local-chain checks additionally exercise narrow balances and narrow
+withdraw/transfer preparation against actual ephemeral deployed test contracts.
+Ganache reports a native µWS compatibility fallback to JavaScript; tests pass with
+that fallback. No Sepolia connection is used by these local-chain executions.
+
+### Scope and final owner recheck
+
+Frozen Solidity, addresses/manifests, database schema, Turso data, dependencies,
+environment/RPC/secrets, original Iteration 9 evidence and main remain unchanged.
+No Render deployment or Sepolia transaction was performed. Iteration 10 was not started.
+
+After owner review and separately authorized deployment, measure action-click to
+MetaMask and receipt-to-authoritative-balance completion separately; the owner may
+reject the prepared MetaMask request to avoid a write. Check the authenticated
+remittance hint and retain existing confirmation/no-resubmit/account-switch behavior.
+Cold deployment proof, RPC latency/limits, Render cold starts, wallet approval,
+required simulation/gas, final canonical fence and Sepolia inclusion remain costs.
+The observed 8.6-second post-state gap cannot be attributed entirely to any one cause
+from completion timestamps; the balance transport reduction is locally demonstrated.
+No claim of faster block inclusion or production financial finality is made.
+
+**FINAL LATENCY CORRECTION LOCALLY VERIFIED — FINAL HOSTED RECHECK REQUIRED**
+Ready for owner review; remediation is not frozen and this branch has not been deployed.

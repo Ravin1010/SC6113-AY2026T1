@@ -15,7 +15,33 @@ def uint(value):
 
 def prepare(reader, owner, action, arguments, validate_wallet):
     with reader.snapshot_batch():
+        if getattr(reader,'read_mode','generic')=='prepare':
+            _validation_batch(reader,owner,action,arguments,validate_wallet)
         return _prepare(reader, owner, action, arguments, validate_wallet)
+
+
+def _validation_batch(reader,owner,action,arguments,validate_wallet):
+    """One independent same-block dynamic batch, followed by unchanged checks."""
+    if not isinstance(action,str) or action not in ACTIONS or not isinstance(arguments,dict):
+        raise BlockchainError('INVALID_ACTION','Select a supported action.',400)
+    requests=[('RoleRegistry','paused',()),('paynow','remittanceCount',())]
+    if action in ('deposit','transfer'):
+        requests.append(('RoleRegistry','isSender',(checksum(owner),)))
+    if action in ('withdraw','transfer'):
+        requests.append(('deposit_money','availableBalance',(checksum(owner),)))
+    if action in ('authorizeSender','authorizeRecipient','revokeRole','transfer') and 'wallet' in arguments:
+        target=checksum(validate_wallet(arguments['wallet']))
+        role='isSender' if action=='authorizeSender' else 'isRecipient'
+        if action=='revokeRole':
+            if type(arguments.get('role')) is not int or arguments['role'] not in (0,1):
+                raise BlockchainError('INVALID_ROLE','Ordinary role must be Sender or Recipient.',400)
+            role='isSender' if arguments['role']==0 else 'isRecipient'
+        requests.append(('RoleRegistry',role,(target,)))
+    if action in ('claim','cancel'):
+        identifier=uint(arguments.get('remittance_id'))
+        requests.extend([('paynow','transaction',(identifier,)),('deposit_money','reservations',(identifier,))])
+    values=reader.calls(requests)
+    reader.paused,reader.count=values[:2]
 
 
 def _prepare(reader, owner, action, arguments, validate_wallet):
