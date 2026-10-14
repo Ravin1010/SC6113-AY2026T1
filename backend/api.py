@@ -353,6 +353,7 @@ def receipt(tx_hash):
         raise APIError(400, 'INVALID_TRANSACTION_HASH', 'A 32-byte transaction hash is required.')
     reader = get_reader(receipt_only=True)
     result = reader.receipt(tx_hash)
+    required = max(1, int(current_app.config['BLOCKCHAIN_CONFIRMATIONS']))
     if result.get('from'):
         # Batched wallets may submit through a wrapper/relayer. Only events decoded
         # from verified deployment contracts can establish participant association.
@@ -377,8 +378,16 @@ def receipt(tx_hash):
         }
         wallet_related = str(result['from']).lower() == g.wallet or participant
         if not deployment_related or (not wallet_related and reader.admin.lower() != g.wallet):
+            # A canonical reverted attempt can release a browser's exact hash lock.
+            # This is NOT deployment association, DApp success or indexed evidence.
+            if (result.get('status') == 'FAILED' and result.get('canonical') is True
+                    and result.get('confirmations', 0) >= required):
+                return jsonify({'transaction_hash': tx_hash, 'status': 'FAILED',
+                    'canonical': True, 'confirmations': result['confirmations'],
+                    'confirmations_required': required, 'dapp_effect_verified': False,
+                    'association': 'wallet_or_wrapper_failure_unverified'})
             raise APIError(403, 'TRANSACTION_ACCESS_DENIED', 'Receipt is not for this wallet/deployment.')
-    result['confirmations_required'] = max(1, int(current_app.config['BLOCKCHAIN_CONFIRMATIONS']))
+    result['confirmations_required'] = required
     if result.get('status') in ('CONFIRMED', 'FAILED') and (
             result.get('canonical') is not True or result.get('confirmations', 0) < result['confirmations_required']):
         result['status'] = 'PENDING_VERIFICATION'

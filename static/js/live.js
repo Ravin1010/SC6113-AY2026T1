@@ -45,7 +45,9 @@ export function setupLive(getSession, onError, refresh) {
         if(pending!==operation||getSession()!==session)return;
         if(receipt.canonical===true&&receipt.confirmations>=confirmationsRequired){
           if(receipt.status==='FAILED'){
-            reportPending('Transaction reverted:');completePending();await evaluate();return;
+            reportPending(receipt.dapp_effect_verified===false
+              ? 'MetaMask/wallet transaction failed before DApp success could be verified. No DApp transaction was confirmed. You may retry. Transaction hash:'
+              : 'Transaction reverted:');completePending();await evaluate();return;
           }
           if(receipt.status==='CONFIRMED'){
             // Keep the lock until BOTH confirmation and the post-state refresh succeed.

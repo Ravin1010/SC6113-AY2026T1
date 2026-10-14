@@ -109,3 +109,61 @@ class RemediationReceiptPolicyTests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/auth/logout',json={},headers=self.csrf).status_code,200)
         self.assertEqual(self.client.get('/api/auth/session').status_code,401)
         self.assertEqual(self.client.get('/api/users/me/balances').status_code,401)
+
+
+class FailedWrapperRecoveryTests(unittest.TestCase):
+    setUp = LiveAPITests.setUp
+
+    def unassociated(self, **changes):
+        value={'transaction_hash':'0x'+'f'*64,'from':'0x'+'b'*40,'to':'0x'+'c'*40,
+            'status':'FAILED','canonical':True,'confirmations':1,'block_number':20,
+            'block_hash':'0x'+'e'*64,'deployment_logs':[], 'unrelated_private_fixture':'never-return'}
+        value.update(changes)
+        self.reader.receipt=lambda _:value
+        return value
+
+    def request_receipt(self):
+        return self.client.get('/api/transactions/0x'+'f'*64+'/receipt?index=deferred')
+
+    def test_canonical_failed_wrapper_returns_only_minimal_terminal_result(self):
+        self.unassociated()
+        with patch('backend.api.index_receipt') as index:
+            response=self.request_receipt()
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json,{'transaction_hash':'0x'+'f'*64,'status':'FAILED',
+            'canonical':True,'confirmations':1,'confirmations_required':1,
+            'dapp_effect_verified':False,'association':'wallet_or_wrapper_failure_unverified'})
+        index.assert_not_called()
+
+    def test_noncanonical_or_underconfirmed_failed_wrapper_cannot_terminate(self):
+        for changes in [{'canonical':False},{'confirmations':0}]:
+            with self.subTest(changes=changes):
+                self.unassociated(**changes)
+                response=self.request_receipt()
+                self.assertEqual(response.status_code,403)
+                self.assertEqual(response.json['error']['code'],'TRANSACTION_ACCESS_DENIED')
+
+    def test_pending_not_found_does_not_need_association_or_terminate(self):
+        self.reader.receipt=lambda _: {'transaction_hash':'0x'+'f'*64,'status':'PENDING_OR_NOT_FOUND','source':'verified_rpc'}
+        response=self.request_receipt()
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['status'],'PENDING_OR_NOT_FOUND')
+        self.assertNotIn('dapp_effect_verified',response.json)
+
+    def test_successful_unassociated_wrapper_still_denied(self):
+        self.unassociated(status='CONFIRMED',confirmations=20)
+        self.assertEqual(self.request_receipt().status_code,403)
+
+    def test_verified_direct_revert_keeps_existing_association_response(self):
+        self.unassociated(**{'from':self.account.address,'to':self.reader.contracts['paynow'].address})
+        response=self.request_receipt()
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['status'],'FAILED')
+        self.assertEqual(response.json['from'],self.account.address)
+        self.assertNotIn('dapp_effect_verified',response.json)
+
+    def test_rpc_failure_does_not_become_terminal_fallback(self):
+        self.reader.receipt=lambda _:(_ for _ in ()).throw(Web3RPCError('fixture outage'))
+        response=self.request_receipt()
+        self.assertEqual(response.status_code,503)
+        self.assertNotIn('status',response.json)

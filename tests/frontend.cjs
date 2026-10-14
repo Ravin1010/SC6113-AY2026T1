@@ -43,7 +43,7 @@ async function pageWithWallet(mode = 'normal', width = 1280) {
         if (window.__walletMode === 'reject-connect' && method === 'eth_requestAccounts') throw {code: 4001};
         if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [window.__walletAddress];
         if (method === 'eth_chainId') return window.__walletChain || '0xaa36a7';
-        if (method === 'eth_sendTransaction' && window.__walletMode === 'live-test') {window.__sendCount=(window.__sendCount||0)+1;window.__sent= params[0]; return '0x'+'f'.repeat(64);}
+        if (method === 'eth_sendTransaction' && window.__walletMode === 'live-test') {window.__sendCount=(window.__sendCount||0)+1;window.__sent= params[0]; return window.__nextHash || '0x'+'f'.repeat(64);}
         if (method === 'eth_sendTransaction' && window.__walletMode === 'reject-tx') throw {code:4001};
         if (method === 'personal_sign') {
           if (window.__walletMode === 'reject-sign') throw {code: 4001};
@@ -760,4 +760,54 @@ test('authenticated verified remittance hint replaces sign-in text without remot
   await page.locator('#remittance-id').fill('1');await waitFor(()=>page.locator('[data-blockchain-action="claim"]').isEnabled());
   assert.equal(detail,0);assert.equal(roles,0);assert.ok(!(await page.locator('#remittance-detail').textContent()).includes('Sign in'));
   await page.locator('#logout').click();await waitFor(()=>page.locator('#login').isVisible());assert.ok((await page.locator('#remittance-detail').textContent()).includes('Sign in'));await context.close();
+});
+
+
+// Post-freeze: terminal unassociated failure releases only the original attempt.
+test('failed wrapper clears exact pending lock and a deliberate retry stores only a new hash',async()=>{
+ const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+ const oldHash='0x'+'f'.repeat(64),newHash='0x'+'a'.repeat(64);const polled=[];let terminal=false;
+ await page.route('**/api/transactions/*/receipt*',route=>{
+  const hash=route.request().url().match(/transactions\/(0x[0-9a-f]+)\//)[1];polled.push(hash);
+  if(hash===oldHash&&terminal)return route.fulfill({json:{transaction_hash:oldHash,status:'FAILED',canonical:true,confirmations:1,confirmations_required:1,dapp_effect_verified:false,association:'wallet_or_wrapper_failure_unverified'}});
+  return route.fulfill({status:403,json:{error:{code:'TRANSACTION_ACCESS_DENIED',message:'Unassociated fixture receipt'}}});
+ });
+ await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
+ const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());await button.click();
+ await waitFor(()=>page.locator('[data-verify-transaction]').isVisible());assert.ok(await button.isDisabled());
+ assert.equal(await page.evaluate(()=>window.__sendCount),1);
+ await page.evaluate(()=>sessionStorage.setItem('sc6113-pending:other-wallet:other-deployment','preserve'));
+ terminal=true;await page.locator('[data-verify-transaction]').click();
+ await waitFor(()=>button.isEnabled());const message=await page.locator('#deposit-result').textContent();
+ assert.ok(message.includes('No DApp transaction was confirmed. You may retry.'));
+ assert.ok(message.includes(oldHash));assert.ok(!message.includes('Confirmed ('));
+ assert.equal(await page.evaluate(()=>Object.keys(sessionStorage).filter(k=>k.startsWith('sc6113-pending:')&&k!=='sc6113-pending:other-wallet:other-deployment').length),0);
+ assert.equal(await page.evaluate(()=>sessionStorage.getItem('sc6113-pending:other-wallet:other-deployment')),'preserve');
+ await pause(200);assert.equal(await page.evaluate(()=>window.__sendCount),1);
+ const boundary=polled.length;await page.evaluate(h=>window.__nextHash=h,newHash);await button.click();
+ await waitFor(()=>page.locator('[data-verify-transaction]').isVisible());
+ assert.equal(await page.evaluate(()=>window.__sendCount),2);assert.ok(await button.isDisabled());
+ assert.deepEqual(polled.slice(boundary),[newHash]);
+ assert.ok((await page.locator('#deposit-result').textContent()).includes(newHash));
+ assert.ok(!(await page.locator('#deposit-result').textContent()).includes(oldHash));
+ const saved=await page.evaluate(()=>Object.keys(sessionStorage).filter(k=>k.startsWith('sc6113-pending:')&&k!=='sc6113-pending:other-wallet:other-deployment').map(k=>JSON.parse(sessionStorage.getItem(k))));
+ assert.equal(saved.length,1);assert.equal(saved[0].hash,newHash);await context.close();
+});
+
+for(const state of ['pending','noncanonical','underconfirmed','rpc503','authorization403'])test(`${state} receipt does not release pending hash or resubmit`,async()=>{
+ const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);let count=0;
+ await page.route('**/api/transactions/*/receipt*',route=>{
+  count++;
+  if(state==='authorization403')return route.fulfill({status:403,json:{error:{code:'TRANSACTION_ACCESS_DENIED',message:'Denied'}}});
+  if(state==='rpc503'||count>1)return route.fulfill({status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Unavailable'}}});
+  return route.fulfill({json:state==='pending'?{status:'PENDING_OR_NOT_FOUND'}:{status:'FAILED',canonical:state!=='noncanonical',confirmations:state==='underconfirmed'?0:1,dapp_effect_verified:false}});
+ });
+ await guest(page,'/depositMoney');await login(page);await page.locator('#deposit-amount').fill('0.001');
+ const button=page.locator('[data-blockchain-action="deposit"]');await waitFor(()=>button.isEnabled());await button.click();
+ await waitFor(async()=>(await page.locator('#deposit-result').textContent()).includes('Verification temporarily unavailable'));
+ assert.ok(await button.isDisabled());assert.equal(await page.evaluate(()=>window.__sendCount),1);
+ assert.ok((await page.locator('#deposit-result').textContent()).includes('0x'+'f'.repeat(64)));
+ assert.equal(await page.evaluate(()=>Object.keys(sessionStorage).filter(k=>k.startsWith('sc6113-pending:')).length),1);
+ assert.ok(!(await page.locator('#deposit-result').textContent()).includes('You may retry.'));
+ await context.close();
 });

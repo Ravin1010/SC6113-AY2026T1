@@ -1112,3 +1112,157 @@ those expensive suites were not rerun for this Markdown-only update. No new Sepo
 write, redeployment, schema/data/configuration/secret edit or main merge was performed.
 
 **ITERATION 9 USABILITY REMEDIATION — APPROVED / FROZEN**
+
+
+## Post-freeze respondent defect — Smart Account failed-wrapper recovery
+
+### Scope, baseline and supplied incident evidence
+
+This is a bounded post-freeze hotfix, **not Iteration 10**. The earlier frozen evidence
+remains valid for its recorded observations and is not rewritten. New branch:
+`hotfix/iteration-9-smart-account-failure-state`, created from the exact frozen evidence
+head `ee4550b2abb65fc673fa3bd614a0f432f31b839d`; frozen implementation remains
+`768460f47155a4076d19b1bfcc0bee3319fed55b` pending separate hosted hotfix review.
+
+The owner relayed a respondent's retry: Smart Account appeared disabled before
+creation, the first wallet transaction failed, and MetaMask later appeared to show
+Smart Account enabled. This is reported wallet UX, not proof that the DApp enabled
+that mode. Supplied hashes:
+
+- Old failed attempt: `0x2de4d384a5e2210202e62aa327516607144c5629cb749fe21f677a2996fa0467`.
+- Newer confirmed transaction: `0x7be3eda7a3e178906253348970524233fb40f4de5f9e1686a47473da2db4acde`.
+
+Owner confirms these two **normal** wallet addresses were already authorized as both
+Sender and Recipient:
+`0xA89247Dcc248Ca5333DeDc09A9Aa69d83658d9c5` and
+`0x8753E34d87bFF7fe31082cBd0DA4Ac2e3961B4D0`.
+No role was read as newly verified or granted by this hotfix. These are technical
+addresses supplied by the owner; no respondent identity mapping is recorded.
+
+Supplied Render evidence, UTC on the incident date:
+preparation 200 at 12:26:00.810; old-hash receipt 200 at 12:26:15.993 and
+12:26:20.717, then 403 at 12:26:26.109, 12:26:35.301, 12:30:05.076 and
+12:30:36.691. Screenshot feedback reports Failed/Sepolia and a truncated destination
+`0xdb9B1...47dB3`; its full address is deliberately not inferred.
+
+### Read-only chain investigation and evidence gap
+
+Both hashes were requested read-only through the repository-documented optional
+`https://ethereum-sepolia-rpc.publicnode.com` using only
+`eth_getTransactionByHash` and `eth_getTransactionReceipt`. Both attempts returned
+HTTP 403 in this execution environment. Blockscout transaction API attempts also
+returned HTTP 403; Etherscan and Blockscout page/API retrieval through the search
+connector reported inaccessible URLs. No production RPC secret was retrieved, no
+RPC setting changed and no transaction was sent.
+
+| Field | Old failed hash | Newer confirmed hash |
+|---|---|---|
+| Status | Failed per owner/MetaMask feedback; not independently retrieved | Confirmed per owner feedback; not independently retrieved |
+| Block number/hash, canonicality | Unavailable | Unavailable |
+| Exact from/to, transaction type, input selector | Unavailable | Unavailable |
+| Authorization/delegation list | Unavailable | Unavailable |
+| Receipt logs and decoded frozen-deployment events | Unavailable | Unavailable |
+| Normal-wallet participant or distinct execution identity | Not independently established | Not independently established |
+
+No exact execution address, automatic delegation transition, committed DApp remittance
+or relationship between these hashes is claimed. The newer wallet-confirmed transaction
+has not independently been shown to contain DApp events. A reverted outer Ethereum
+transaction cannot commit successful inner DApp execution state, but application of
+that fact to this exact old hash still requires read-only canonical receipt verification.
+A later hosted recheck should retrieve both receipts/transactions through the existing
+verified read path; no new write is needed. The software diagnosis below does not
+depend on inventing those unavailable chain fields.
+
+### Confirmed software mechanism
+
+`SepoliaReader.receipt()` returns pending/not-found without from/to. API association
+therefore permits the pending response. After mining it supplies from/to and decoded
+verified-contract logs. The API requires deployment association and wallet/participant
+association (or the existing Admin access rule). A failed outer wrapper with no DApp
+logs and a non-deployment destination can therefore receive
+`TRANSACTION_ACCESS_DENIED`/403. A successful wrapper remains eligible only through
+verified DApp logs/participant evidence; wrapper destinations are not inherently invalid.
+
+`verifyPending()` treats generic receipt exceptions including 403 as temporary. It
+preserves the hash in wallet/deployment-scoped sessionStorage and keeps writes locked.
+Only a sufficiently confirmed canonical FAILED/CONFIRMED response terminates it.
+This fully explains the supplied 200 → 403 stale-lock sequence **if** the old mined
+receipt lacks normal association; exact chain association remains unverified here.
+
+The frontend stores only the hash returned by its own wallet request. It does not
+watch arbitrary later MetaMask history or infer relationships between unrelated hashes.
+No repository evidence establishes how the newer transaction was submitted; it cannot
+be automatically adopted safely. The intended recovery is terminate a proven reverted
+old attempt, then permit an explicit user retry whose returned new hash becomes the
+new pending record.
+
+### Bounded backend/frontend correction and security boundary
+
+For an otherwise unassociated receipt only, the authenticated receipt API returns a
+minimal terminal failure when status is FAILED, canonical is exactly true and current
+confirmations meet the unchanged configured threshold. Its only fields are:
+`transaction_hash`, `status`, `canonical`, `confirmations`, `confirmations_required`,
+`dapp_effect_verified: false` and
+`association: wallet_or_wrapper_failure_unverified`.
+No from/to, block details, participants, calldata, logs or unrelated metadata are
+exposed through this fallback. It is not persisted/indexed as DApp evidence.
+
+The hash/receipt and canonicality are obtained by the unchanged verified server
+reader, not browser-supplied receipt data. This result proves termination of a reverted
+attempt, **not** wallet ownership, DApp association or DApp success. Pending/unknown,
+noncanonical and insufficient-confirmation receipts cannot use this terminal fallback.
+An unrelated successful transaction remains 403. Existing direct associated reverts
+retain their normal response. Successful direct/wrapper association and event/post-state
+requirements are unchanged.
+
+For that minimal terminal failure, the frontend says:
+“MetaMask/wallet transaction failed before DApp success could be verified.
+No DApp transaction was confirmed. You may retry.” It retains the failed hash visibly
+as evidence, removes only its current wallet/deployment pending storage record, clears
+pending/sending and re-evaluates eligibility. There is no automatic resubmission.
+The existing operation/session guards prevent stale asynchronous verification from
+clearing a different account's active context. A deliberate subsequent action stores
+its new returned hash; the old hash is no longer polled. Generic 403/503 errors still
+retain pending state. Canonical success still requires action-specific direct post-state;
+Activity remains non-authoritative and nonblocking.
+
+Smart Account identity remains a compatibility boundary: contracts authorize actual
+`msg.sender`, and funding belongs to that address. A distinct execution address does
+not inherit an ordinary wallet's roles or balance. No wrapper/Smart Account role is
+created automatically. This hotfix does not diagnose the respondent's exact execution
+identity, enable Smart Accounts or bypass wallet security warnings.
+
+### Local regression evidence and hosted recheck
+
+New Python tests cover the exact minimal response field whitelist/no indexing,
+noncanonical/underconfirmed denial, pending/not-found, successful unassociated denial,
+normal associated revert and RPC failure. New browser tests reproduce 403 lock →
+canonical minimal failure → exact storage cleanup → deliberate new-hash retry, retaining
+another wallet's stored context and proving no old-hash polling or auto-resubmission.
+Separate browser cases retain pending state for unknown/pending, noncanonical,
+underconfirmed, 503 and generic 403. Existing success-wrapper, direct-success/revert,
+authoritative post-state, event-derived ID, account/network/session switching and
+one-confirmation tests remain in the full regression run.
+
+Final local regression results: **214 Python tests passed; 87 browser tests passed**
+(including six new API and six new browser tests). Solidity 0.8.34 compiled three
+contracts with zero warnings; contract sanity passed 10 groups/50 rejection checks;
+role characterization passed 8 assertions; comprehensive evaluation passed 71 scenarios,
+61 rejections, 952 assertions and 48 seeded transitions. Wallet characterization passed
+4 checks. SQLite and libSQL local-chain integrations each passed 17 assertions with
+12 canonical events and idempotent repeat indexing. Dependency consistency, JS syntax
+and `git diff --check` passed. Ganache used its existing JavaScript µWS fallback; no
+Sepolia access was used by local contract tests. Only API failure handling,
+its frontend message and tests plus this appended evidence section change. Frozen
+Solidity/contracts, deployment addresses/manifests, database schema/data, configuration,
+RPC/environment/secrets and Render settings remain untouched. No role authorization,
+Sepolia write, Render deployment, main merge or Iteration 10 work occurred.
+
+Hosted recheck is required after separate owner approval/deployment: use the old hash's
+Check transaction path, confirm minimal canonical failure and released action lock;
+inspect the newer hash separately using normal successful-receipt association. Do not
+re-sign or resubmit merely to collect evidence. If either hash is unmined/noncanonical,
+retain the lock. No generic Smart Account support or exact on-chain diagnosis is claimed.
+
+**POST-FREEZE SMART ACCOUNT FAILURE HOTFIX LOCALLY VERIFIED — HOSTED RECHECK REQUIRED**
+The prior freeze is preserved; this hotfix is not re-frozen or deployed.
