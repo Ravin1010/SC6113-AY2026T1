@@ -1266,3 +1266,177 @@ retain the lock. No generic Smart Account support or exact on-chain diagnosis is
 
 **POST-FREEZE SMART ACCOUNT FAILURE HOTFIX LOCALLY VERIFIED — HOSTED RECHECK REQUIRED**
 The prior freeze is preserved; this hotfix is not re-frozen or deployed.
+
+## Final post-freeze incident evidence and acceptance — 14 October 2026
+
+This final section supersedes the preceding hotfix's local-only/recheck status and
+initial read-access gap. It preserves the original study and remediation freeze
+history; it does not revise participant findings or begin Iteration 10.
+
+### Hosted recovery verification
+
+Implementation `0302ab0a4ac78b80384b5c6e26985af30fd1578d`
+(`Handle failed Smart Account wrapper transactions safely`) was deployed through
+Render deploy `dep-db7o5idg1s2s73b89t3g`, service `srv-dal7read0e5s738rldh0`.
+Read-only Render verification returned **Live**, that exact commit, manual trigger,
+and completion at `2026-10-14T13:26:28.1403Z`. This documentation pass did not redeploy.
+
+Owner/respondent hosted verification confirms that the previously stuck wrapped
+attempt becomes terminal FAILED; the DApp displays the failure/retry message, clears
+its stale pending hash/session lock and restores usable transaction controls. No
+automatic resubmission occurs. The hotfix provides **safe recovery**, not prevention
+of future wallet-generated protected failures. Successful transactions still require
+normal verified deployment/participant association and authoritative post-state.
+
+### Final trace-based diagnosis
+
+The subsequent read-only investigation successfully obtained all six primary
+transactions and receipts through `https://ethereum-sepolia-rpc.publicnode.com`.
+Canonical block reads matched their receipt hashes. PublicNode `trace_transaction`
+and Blockscout `/api/v2/transactions/<hash>/raw-trace` independently identify the same
+internal failures. ABI decoding used the frozen DApp ABIs and public framework types;
+no transaction was submitted. These results supersede the earlier temporary retrieval
+failure, without making the earlier record incorrect for its time.
+
+| Evidence | Exact transaction hash | Block | Result / verified relationship |
+|---|---|---:|---|
+| Protected Create | `0xd5bff9633718e4b42bf0e3c352565679f217292592516dd416733a4a396c0790` | 11913726 | Failed; funding `reserveFunds(...)` out of gas |
+| Standard Create | `0x7e026509f3e99019c1293b3f6dabf93984b2a1e40be631c8ac278e2b7dafac63` | 11913763 | Successful; `RemittanceCreated` / `FundsReserved`, ID 12, 0.005 test ETH |
+| Additional Create | `0x0ae10deb4cbe37eea88acd9d106a6d49c4415987cdac0d1ce610e4f6ab19ee07` | 11913809 | Successful; `RemittanceCreated` / `FundsReserved`, ID 13, 0.001 test ETH |
+| Protected Claim | `0x0f411f53d7d76a59d3a8c27570d09aff510a2e86038171274210ae992c7d21c9` | 11913844 | Failed; funding `releaseFunds(13)` out of gas |
+| Standard Claim | `0x3c5d3528dbb25eb9b6040f00c4086b321ac2e7804687cc09299d154dfecc3c22` | 11913860 | Successful; `RemittanceClaimed` / `ReservedFundsReleased`, ID 13 |
+| Additional Claim | `0x94eb6c41a6bf63d1e82c6a873b35d1958afe32e024e04ac5cf3a1ba3a6cfea3b` | 11913837 | Successful; `RemittanceClaimed` / `ReservedFundsReleased`, ID 12 |
+
+Protected nested target remained `paynow`:
+`0xA2Ee37DD717a8758Eb864788456d047b296C00E8`, with native execution value zero.
+Protected Create calldata matched the successful standard Create byte-for-byte;
+protected Claim calldata matched the standard `claim(13)` call byte-for-byte.
+The effective DApp caller was preserved:
+
+- Create sender: `0xF84B634B34A031e99FDc85D34088af99B60D8300`.
+- Claim recipient/caller: `0x8753E34d87bFF7fe31082cBd0DA4Ac2e3961B4D0`.
+
+Role/wiring checks for Create and participant/lifecycle checks for Claim passed
+before funding execution. Failed funding frames were trace paths `[3,0,4]` for
+Create (`reserveFunds`, selector `0x13beb570`) and `[3,0,1]` for Claim (`releaseFunds`,
+selector `0x4d68282f`). Funding received 672,911 gas in the protected Create versus
+707,783 in the successful standard Create, and 135,795 in protected Claim versus
+177,435 in standard Claim. Receipt gas used is not the same as gross nested execution
+requirements or gas forwarded; an inner frame can exhaust its allocation while the
+outer frame retains gas. The Create VM replay additionally identifies an exceptional
+SSTORE at program counter 1801. Both outer failures returned empty revert data `0x`;
+no known DApp Solidity require-message/revert reason was observed.
+
+The Added Protection post-execution hook was **not reached**. Both failed receipts
+had no surviving DApp events. Historical reads showed Create count remained 11 and
+Claim #13 remained PENDING with its reservation active across the failed blocks.
+Later direct reads confirmed #12 and #13 COMPLETED with inactive reservations.
+DApp execution changes were reverted atomically; this is distinct from EIP-7702
+protocol authorization processing described below.
+
+### Delegation and corrected hypotheses
+
+The failed outer transactions targeted MetaMask DelegationManager
+`0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3`, method
+`redeemDelegations(bytes[],bytes32[],bytes[])`, selector `0xcef6d209`.
+They were type-4 transactions authorizing EIP7702StatelessDeleGator implementation
+`0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B`; recovered authorization signers were
+the original accounts. Permission contexts used self-delegation and one
+NativeBalanceChangeEnforcer at `0xbD7B277507723490Cd50b12EaaFe87C616be6880`,
+with a zero maximum native-balance decrease bound. Signature validation and
+pre-execution enforcer hooks succeeded. No postcondition rejection was observed.
+
+Historical code reads changed from empty code before each failed protected block to
+`0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b` afterward. EIP-7702 specifies
+that processed delegation indicators persist even if subsequent execution fails.
+This explains why Smart Account capability may appear enabled after a failed
+protected attempt; it does **not** establish that the DApp enabled it.
+
+| Hypothesis | Final assessment for these transaction pairs |
+|---|---|
+| Smart Account made paynow see a different unauthorized sender | REJECTED: traces preserve the original effective caller |
+| RoleRegistry authorization caused failure | REJECTED: required authorization checks passed |
+| DApp lifecycle/business logic caused the revert | REJECTED as the observed cause: execution reached funding and failed from gas exhaustion |
+| Added Protection postcondition mismatch caused the revert | REJECTED: funding failed before the post-execution hook |
+| Wrapped execution suffered insufficient nested gas | SUPPORTED by both trace sources |
+
+### Upstream evidence, version observations and remaining uncertainty
+
+Final classification: **MetaMask Added Protection / EIP-7702 wrapped-execution
+gas-budgeting compatibility issue**. Immediate failure: nested out-of-gas in
+`deposit_money`. Confidence is **HIGH** for failure location, preserved identity and
+nested-call equivalence; **MEDIUM-HIGH** for attribution to MetaMask wrapped
+gas-estimation behavior. This is not a universal bug claim across accounts/versions.
+
+MetaMask Extension issue [#46334](https://github.com/MetaMask/metamask-extension/issues/46334)
+was open when read, labelled `type-bug` and `regression-prod-13.46.1`. It reports
+DApp-supplied gas limits being replaced with fresh estimates. A separate comment in
+that issue reports first protected EIP-7702 Sepolia transactions exhausting nested gas
+on version 13.50.0. Inspected v13.50.0 container code removes supplied gas fields before
+re-estimation and writes the resulting estimate back. **The observed trace pattern is
+strongly consistent with the open MetaMask gas-estimation regression.** MetaMask has
+not officially confirmed that exact issue as the root cause of these respondent hashes.
+Exact simulation responses and wallet gas-estimation metadata remain unavailable.
+
+Owner-supplied version evidence:
+
+| Person's testing context | Extension version | Observed UI |
+|---|---|---|
+| Respondent | 13.48.0 | Added Protection checkbox appeared during affected transactions |
+| Owner/tester | 13.50.0 | Same checkbox did not appear in their tested flow |
+
+These are manual version/UI observations, not controlled version-isolation tests.
+They show eligibility/UI can vary with version/account/state. They do not prove
+13.50.0 fixes the issue or that every 13.48.0 installation is affected.
+
+The Help Center's on-chain simulation network list omits Ethereum Sepolia, but the
+framework is deployed there and inspected screening code includes `ethereum-sepolia`.
+**Sepolia-specific eligibility/support remains an evidence gap and is not required to
+explain the observed failure.** It is not classified simply as “Sepolia unsupported.”
+
+Primary reference sources:
+
+- [MetaMask simulation explanation](https://support.metamask.io/manage-crypto/transactions/simulations/).
+- [Framework deployments](https://github.com/MetaMask/delegation-framework/blob/main/documents/Deployments.md).
+- [DelegationManager execution/hooks](https://github.com/MetaMask/delegation-framework/blob/main/src/DelegationManager.sol).
+- [NativeBalanceChangeEnforcer](https://github.com/MetaMask/delegation-framework/blob/main/src/enforcers/NativeBalanceChangeEnforcer.sol).
+- [Extension container gas handling, v13.50.0](https://github.com/MetaMask/metamask-extension/blob/v13.50.0/app/scripts/lib/transaction/containers/util.ts).
+- [MetaMask issue #46334 and reproduction comments](https://github.com/MetaMask/metamask-extension/issues/46334).
+- [EIP-7702 authorization persistence](https://eips.ethereum.org/EIPS/eip-7702).
+
+### Final recommendation and freeze
+
+No Solidity or RoleRegistry change is recommended. No backend transaction-construction
+change is currently justified. Do not automatically disable protections, switch Smart
+Account mode or authorize framework contracts as users. Retain the terminal-failure
+recovery hotfix and record this external wallet compatibility limitation for the
+coursework MVP. No further Sepolia write is required.
+
+Suggested bounded guidance, **recorded here only; no UI code changed**:
+“MetaMask Added Protection / Smart Account wrapped execution may fail for this Sepolia
+coursework DApp in some wallet/version/account states. If a protected transaction
+fails, the DApp safely detects the failure and allows retry. Use the standard wallet
+transaction path for this testnet DApp where applicable.” This is not general advice
+to disable security protections for real assets or unfamiliar DApps.
+
+Freeze lineage:
+
+- Original Iteration 9 remediation documentation freeze:
+  `ee4550b2abb65fc673fa3bd614a0f432f31b839d`.
+- Hosted hotfix implementation:
+  `0302ab0a4ac78b80384b5c6e26985af30fd1578d`.
+- Hosted implementation deploy: `dep-db7o5idg1s2s73b89t3g`.
+- New docs-only freeze: the Git commit adding this final acceptance section, with its
+  exact SHA returned in the delivery response. It is distinct from the hosted code;
+  a commit cannot embed its own content-derived SHA. Identify it with
+  `git log -1 --format='%H %s' -- docs/usability/ITERATION_9_REMEDIATION.md`.
+
+Only this Markdown file changes in the final pass; scope/diff checks passed. The
+preceding 214 Python/87 browser and contract/local-chain passing results are preserved,
+not rerun or attributed to this docs-only pass. No code/tests/configuration/manifests,
+secrets/RPC/Turso data/schema or Render settings changed. No role transaction, Sepolia
+write, redeployment, main merge or Iteration 10 work occurred. Earlier accepted
+Iterations 1–9 and freeze history are preserved. No further hotfix implementation work
+is planned unless new blocking evidence arises.
+
+**POST-FREEZE SMART ACCOUNT FAILURE HOTFIX — APPROVED / FROZEN**
