@@ -1,6 +1,13 @@
-# Post-Iteration-9 usability remediation — local verification
+# Post-Iteration-9 usability remediation — final evidence and freeze
 
-## Scope and frozen baseline
+**Final status: ITERATION 9 USABILITY REMEDIATION — APPROVED / FROZEN**
+
+Final implementation: `768460f47155a4076d19b1bfcc0bee3319fed55b`.
+Final hosted deployment: `dep-db7l185g1s2s73au1sfg` (Render Live, read-only verified).
+Earlier local/pending statuses below describe historical checkpoints; the final hosted
+acceptance section supersedes them. Original participant evidence remains unchanged.
+
+## Original local-pass scope and frozen baseline
 
 Exact accepted Iteration 9 head: `1cd5df1064b80785d0c6cf57b2bdf1c83b393aaa`.
 Branch: `feature/iteration-9-usability-remediation`.
@@ -997,3 +1004,111 @@ No claim of faster block inclusion or production financial finality is made.
 
 **FINAL LATENCY CORRECTION LOCALLY VERIFIED — FINAL HOSTED RECHECK REQUIRED**
 Ready for owner review; remediation is not frozen and this branch has not been deployed.
+
+
+## Final hosted verification and remediation freeze — 14 October 2026
+
+### Deployment and evidence provenance
+
+Final implementation head: `768460f47155a4076d19b1bfcc0bee3319fed55b`.
+Implementation message: `Reduce final transaction preparation latency and fix remittance status text`.
+Branch: `feature/iteration-9-usability-remediation`.
+Service: `srv-dal7read0e5s738rldh0`, https://sc6113-ay2026t1.onrender.com.
+Deploy: `dep-db7l185g1s2s73au1sfg`.
+
+The owner completed hosted verification of this exact implementation. During this
+final documentation pass, read-only Render `get_deploy` and latest `list_deploys`
+independently returned that exact commit/deploy with status **live**, trigger **manual**,
+finished at `2026-10-14T09:52:29.278658Z`. No deployment was triggered in this pass.
+Owner reports no environment/configuration/address/contract changes. Timings below
+are supplied hosted observations/Render response-completion timestamps, not new
+controlled measurements by this documentation pass. Original Iteration 9 participant
+findings, local automated results and synthetic measurements remain separate above.
+
+### Final hosted readiness and timing
+
+All supplied times are SGT on 14 October 2026.
+
+| Response | Completion | Observed interval |
+|---|---|---|
+| Authentication verification | 17:54:05.020 | Starting reference |
+| `/api/users/me` | 17:54:13.463 | Approximately 8.4 s after authentication |
+| `/api/users/me/balances` | 17:54:15.246 | Approximately 1.8 s additional |
+| `/api/remittances?limit=20&offset=0` | 17:54:17.544 | Approximately 2.3 s additional; primary authoritative readiness approximately 12.5 s |
+| `/api/transactions?limit=10&offset=0` | 17:54:19.763 | Approximately 2.2 s after primary readiness; full presentation approximately 14.7 s |
+
+Full-presentation checkpoints progressed approximately **57–58 → 45.7 → 23.7 →
+17.2 → 14.7 seconds**. Primary readiness improved from approximately 15.0 to 12.5
+seconds in the final correction. These are hosted observation checkpoints, not
+controlled equivalent benchmarks; differences cannot be assigned causally to code
+alone. Cached Activity remains non-authoritative and does not gate primary readiness.
+
+### Final deposit verification and authoritative post-state
+
+| Response | Supplied completion time |
+|---|---|
+| `/api/auth/session` | 17:54:42.651 |
+| `/api/transactions/prepare` | 17:54:51.477 |
+| First receipt check | 17:55:07.309 |
+| Second receipt check | 17:55:12.031 |
+| Receipt showing confirmed/canonical transaction | 17:55:20.885 |
+| Fresh authoritative balances | 17:55:23.755 |
+| Subsequent normal receipt/evidence persistence request | 17:55:27.859 |
+
+Confirmed receipt to fresh authoritative balance completion was approximately **2.9 s**,
+versus approximately **8.6 s** at the prior checkpoint: roughly **67% shorter observed
+interval**. This is application/RPC post-state response delay, not mining time, and is
+not an isolated controlled causal measurement. Activity/evidence persistence occurred
+later and did not gate authoritative success.
+
+Session-response to preparation-response completion was approximately **8.8 s**; it
+is not an exact preparation duration. Browser action-click/request-start timestamps
+were not recorded. **No final hosted stopwatch measurement of button-to-MetaMask is
+available**, so none is claimed. Preparation-to-confirmed-receipt includes some
+combination of wallet interaction, broadcast, Sepolia inclusion, RPC response and
+receipt polling/verification; it is neither pure backend time nor pure mining time.
+No final deposit hash was supplied with these timestamps; none is reconstructed or
+invented. The local controlled preparation result remains five transports: latest
+header, fresh chain identity, pinned dynamic batch, pinned simulation plus gas batch,
+final canonical hash fence. This does not establish a hosted stopwatch value.
+
+### Final functional acceptance
+
+The owner-supplied final hosted verification confirms corrected authenticated
+Claim/Cancel guidance: current status and participant permission are checked when the
+action is clicked. The stale sign-in message is no longer retained for a verified
+session. No remote eligibility lookup was restored. Check Inputs uses local eligibility;
+backend preparation still provides fresh authoritative authorization and simulation.
+
+Activity remains DB-backed cached evidence, explicitly non-authoritative; explicit
+bounded reconciliation remains available. It gates neither primary dashboard readiness
+nor transaction confirmation. Canonical receipt and the required action-specific
+**direct authoritative post-state** still gate visible final success. One-confirmation
+policy, reorg checks, event-derived created ID, account-switch reauthentication,
+pending-hash lock and verification-only/no-resubmit protections remain unchanged.
+Earlier ordinary-account and the single tested Smart Account hosted evidence are
+preserved; this final pass does not expand Smart Account compatibility claims.
+
+### Residual limitations and freeze decision
+
+Cold/periodic full deployment proof, public Sepolia RPC latency, Render single sync
+worker/free-tier characteristics, wallet interaction and Sepolia block inclusion remain
+accepted coursework limitations. One confirmation has less short-reorg protection than
+six. Turso/Activity and browser snapshots remain non-authoritative; blockchain direct
+reads remain financial authority. No production-grade financial suitability or instant
+settlement is claimed.
+
+The accepted implementation completed the final hosted recheck; no blocking defect
+was reported. Iterations **1–9 remain accepted/frozen as applicable**. No further
+Iteration 9 production-code changes are planned unless a new blocking defect is found.
+This freeze is evidence-only and is not Iteration 10.
+
+Final-pass validation: exact accepted starting HEAD and clean tree checked; latest
+Render Live implementation independently confirmed; only this documentation file
+changed; frozen participant evidence and all production/test/configuration files are
+unchanged; `git diff --check` passed. The preceding 208 Python, 81 browser and full
+contract/SQLite/libSQL regression results are retained as implementation evidence;
+those expensive suites were not rerun for this Markdown-only update. No new Sepolia
+write, redeployment, schema/data/configuration/secret edit or main merge was performed.
+
+**ITERATION 9 USABILITY REMEDIATION — APPROVED / FROZEN**
