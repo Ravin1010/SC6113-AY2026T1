@@ -128,3 +128,9 @@ References: [Iteration 7](../testing/ITERATION_7.md), [Iteration 8](../research/
 All required local suites passed. Hosted routes and protected authorization boundaries passed; live metadata matches the accepted implementation; pinned contract wiring/state checks passed. No genuine technical blocker was established. Only this document is committed; no generated database/build/cache/profile files are staged. No new chain write, deployment, infrastructure/configuration/database change or main merge occurred.
 
 **TECHNICAL BASELINE — APPROVED / FROZEN**
+
+## Post-freeze current-state update — 15 October 2026
+
+The original verification/deployment facts and regression results above remain historical evidence. Two later UI-only commits were accepted: `da6a3c56a09857b129548b649d013ba2770a754b` (deposited-funds/claim wording) and `54041cb257d85037ed4c45fe3f91da5d235a7eca` (landing name input/button alignment). Their diff is limited to templates/CSS; no Solidity, backend, JavaScript, accounting, configuration or schema change.
+
+Render now reports `54041cb257d85037ed4c45fe3f91da5d235a7eca` Live in deploy `dep-db83kbrncjis73eg8560`. The owner reports both UI changes working as expected. Each correction passed 87 browser tests; the wording change also passed 29 backend/three rendered-page checks, and layout had focused 320/360/768/1280px checks. **The full Iteration 11 regression was not rerun after these changes.** The current documentation foundation is [FINAL_SUBMISSION_BASELINE.md](FINAL_SUBMISSION_BASELINE.md); this note does not retroactively replace the original `0302ab0` deployment observation.
