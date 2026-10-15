@@ -491,3 +491,11 @@ dd {
 .user-log-table {width:100%; border-collapse:collapse; margin:1rem 0; text-align:left;}
 .user-log-table th, .user-log-table td {padding:.75rem; border-bottom:1px solid var(--border, #dce4ec); overflow-wrap:anywhere;}
 body[data-page="/"] #login-panel {display:none;}
+
+/* Presentation of the existing, paginated remittance list; no separate data source. */
+.status-overview>div {margin:.75rem 0;}
+.status-overview dt {font-weight:650;}
+.status-overview dd {display:flex;align-items:center;gap:.75rem;margin:0;}
+.status-overview [data-status-count] {min-width:2ch;font-variant-numeric:tabular-nums;}
+.status-track {flex:1;min-width:0;height:.8rem;background:var(--accent-light);border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+.status-track>span {display:block;width:0;height:100%;background:var(--accent);}

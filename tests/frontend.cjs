@@ -811,3 +811,65 @@ for(const state of ['pending','noncanonical','underconfirmed','rpc503','authoriz
  assert.ok(!(await page.locator('#deposit-result').textContent()).includes('You may retry.'));
  await context.close();
 });
+
+// Presentation-only status overview consumes the existing paginated list response.
+const statusCases=[
+  ['empty',[],[0,0,0]],
+  ['pending-only',['PENDING','PENDING'],[2,0,0]],
+  ['completed-only',['COMPLETED'],[0,1,0]],
+  ['cancelled-only',['CANCELLED','CANCELLED'],[0,0,2]],
+  ['mixed',['PENDING','COMPLETED','COMPLETED','CANCELLED'],[1,2,1]],
+  ['unknown',['PENDING','UNKNOWN','__proto__',null],[1,0,0]]
+];
+function statusItems(statuses){return statuses.map((status,i)=>({id:String(i+1),status,amount:{test_eth:'0.001'},sender:account.address,recipient:'0x'+'e'.repeat(40)}));}
+async function statusCounts(page){return page.locator('[data-status-count]').allTextContents();}
+for(const [name,statuses,expected] of statusCases)test(`status overview ${name}: accurate loaded counts with no extra requests`,async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);
+  const reads=countReads(page),apiPaths=[];
+  page.on('request',r=>{const p=new URL(r.url()).pathname;if(p.startsWith('/api/'))apiPaths.push(p);});
+  await page.route('**/api/remittances?*',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,items:statusItems(statuses),limit:20,offset:0}}));
+  await guest(page);await login(page);await page.waitForLoadState('networkidle');
+  assert.equal(await page.locator('#remittance-status-data').isVisible(),true);
+  assert.deepEqual(await statusCounts(page),expected.map(String));
+  assert.equal(await page.locator('#remittance-status-total').textContent(),String(statuses.length));
+  const widths=await page.locator('[data-status-bar]').evaluateAll(els=>els.map(el=>parseFloat(el.style.width)));
+  const max=Math.max(...expected,1);assert.deepEqual(widths,expected.map(n=>n/max*100));
+  assert.equal(await page.locator('.status-track[aria-hidden="true"]').count(),3);
+  if(name==='empty')assert.match(await page.locator('#remittance-status-message').textContent(),/No remittances loaded/);
+  if(name==='unknown')assert.match(await page.locator('#remittance-status-message').textContent(),/3 loaded remittance\(s\) have an unknown status/);
+  assert.deepEqual(reads,{account:1,balance:1,list:1,history:1});
+  const allowed=new Set(['/api/auth/session','/api/auth/nonce','/api/auth/verify','/api/users/me','/api/users/me/balances','/api/remittances','/api/transactions']);
+  assert.ok(apiPaths.every(path=>allowed.has(path)),JSON.stringify(apiPaths));
+  assert.match(await page.locator('#live-remittances').textContent(),/direct verified contract scan/);
+  for(const status of ['PENDING','COMPLETED','CANCELLED'])assert.ok(await page.getByText(status,{exact:true}).isVisible());
+  await context.close();
+});
+test('status overview follows existing Refresh and clears on account invalidation',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);let statuses=['PENDING'];const reads=countReads(page);
+  await page.route('**/api/remittances?*',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,items:statusItems(statuses)}}));
+  await guest(page);await login(page);await waitFor(async()=>(await statusCounts(page))[0]==='1');
+  statuses=['COMPLETED','CANCELLED'];await page.locator('#refresh').click();
+  await waitFor(async()=>(await statusCounts(page))[1]==='1');await page.waitForLoadState('networkidle');
+  assert.deepEqual(await statusCounts(page),['0','1','1']);assert.deepEqual(reads,{account:2,balance:2,list:2,history:2});
+  await page.evaluate(()=>window.__emitWallet('accountsChanged',['0x'+'d'.repeat(40)]));
+  await waitFor(()=>page.locator('#login').isVisible());assert.deepEqual(await statusCounts(page),['0','0','0']);
+  assert.equal(await page.locator('#remittance-status-data').evaluate(el=>el.hidden),true);await context.close();
+});
+test('status overview does not retain counts after a failed list refresh',async()=>{
+  const {page,context}=await pageWithWallet('live-test');await verifiedRoutes(page);let fail=false;
+  await page.route('**/api/remittances?*',route=>route.fulfill(fail?{status:503,json:{error:{code:'BLOCKCHAIN_READER_UNAVAILABLE',message:'Unavailable'}}}:{json:{source:'verified_contract',authoritative:true,items:statusItems(['COMPLETED'])}}));
+  await guest(page);await login(page);await waitFor(async()=>(await statusCounts(page))[1]==='1');fail=true;
+  await page.locator('#refresh').click();await waitFor(async()=>(await page.locator('#remittance-status-message').textContent()).includes('could not be loaded'));
+  assert.equal(await page.locator('#remittance-status-data').evaluate(el=>el.hidden),true);assert.deepEqual(await statusCounts(page),['0','0','0']);await context.close();
+});
+for(const width of [320,360,768,1280])test(`status overview responsive labels/counts at ${width}px`,async()=>{
+  const {page,context}=await pageWithWallet('live-test',width);await verifiedRoutes(page);
+  await page.route('**/api/remittances?*',route=>route.fulfill({json:{source:'verified_contract',authoritative:true,items:statusItems(['PENDING','COMPLETED','CANCELLED'])}}));
+  await guest(page);await login(page);await waitFor(async()=>(await statusCounts(page))[0]==='1');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  for(const row of await page.locator('.status-overview>div').all()){
+    assert.ok(await row.locator('dt').isVisible());assert.ok(await row.locator('[data-status-count]').isVisible());
+    const bounds=await row.boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=width);
+  }
+  await context.close();
+});

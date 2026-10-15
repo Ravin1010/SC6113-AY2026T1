@@ -79,7 +79,7 @@ export function setupLive(getSession, onError, refresh) {
   }
   const buttons=()=>Array.from(document.querySelectorAll('[data-blockchain-action]'));
   const disable=()=>{buttons().forEach(button=>button.disabled=true);const audit=document.getElementById('audit-refresh');if(audit)audit.disabled=true;};
-  function invalidate(){terminalIds.clear();state=null;revision++;disable();text('audit-records','');text('available-balance','Unavailable');text('reserved-balance','Unavailable');text('live-remittances','Live remittance state unavailable.');}
+  function invalidate(){terminalIds.clear();state=null;revision++;disable();text('audit-records','');text('available-balance','Unavailable');text('reserved-balance','Unavailable');text('live-remittances','Live remittance state unavailable.');renderStatusOverview(null,'Sign in to load remittance status counts.');}
   function basic(){const session=getSession();return Boolean(state && session && state.deployment.deployment_verified===true && state.deployment.wired===true && state.connection.chainId===chain && state.connection.address.toLowerCase()===session.wallet.toLowerCase());}
   async function check(button,ticket) {
     button.disabled=true;
@@ -130,16 +130,36 @@ export function setupLive(getSession, onError, refresh) {
     await evaluate();
     if(list)await refreshList();
   }
+  function renderStatusOverview(items,message=''){
+    const panel=document.getElementById('remittance-status-data');
+    if(!panel)return;
+    panel.hidden=items===null;
+    const counts={PENDING:0,COMPLETED:0,CANCELLED:0};
+    let unknown=0;
+    for(const item of items||[]){
+      if(Object.hasOwn(counts,item.status))counts[item.status]++;
+      else unknown++;
+    }
+    const largest=Math.max(...Object.values(counts),1);
+    for(const [status,count] of Object.entries(counts)){
+      panel.querySelector(`[data-status-count="${status}"]`).textContent=String(count);
+      panel.querySelector(`[data-status-bar="${status}"]`).style.width=`${count/largest*100}%`;
+    }
+    text('remittance-status-total',String(items?.length||0));
+    text('remittance-status-message',message||(items.length===0?'No remittances loaded.':unknown?`${unknown} loaded remittance(s) have an unknown status and are not assigned to a bar.`:'Counts match the currently loaded remittance list.'));
+  }
   async function refreshList(){
     if(state && document.getElementById('live-remittances')) {
       const ticket=revision;
+      renderStatusOverview(null,'Loading remittance status counts…');
       try{const data=await viewRead('/api/remittances?limit=20&offset=0',requestAPI);if(ticket!==revision||!state)return;
-        if(data.source!=='verified_contract'||data.authoritative!==true)throw new Error('Remittance provenance unavailable.');
+        if(data.source!=='verified_contract'||data.authoritative!==true||!Array.isArray(data.items))throw new Error('Remittance provenance unavailable.');
+        renderStatusOverview(data.items);
         const target=document.getElementById('live-remittances');target.replaceChildren();
         const summary=document.createElement('p');summary.textContent='Discovery: direct verified contract scan, newest first. History indexing is independent.';target.append(summary);
         if(!data.items.length){const p=document.createElement('p');p.textContent='No remittances for this wallet in the verified contract snapshot.';target.append(p);}
         for(const item of data.items){const p=document.createElement('p');p.className='identifier';p.textContent=`#${item.id} · ${item.status} · ${item.amount.test_eth} test ETH · ${item.sender} → ${item.recipient}`;target.append(p);}
-      }catch(error){if(ticket===revision){text('live-remittances',`Live remittance list unavailable. ${friendlyError(error)}`);if(error.code==='AUTH_REQUIRED')onError(error);}}
+      }catch(error){if(ticket===revision){renderStatusOverview(null,'Status overview unavailable; remittance list could not be loaded.');text('live-remittances',`Live remittance list unavailable. ${friendlyError(error)}`);if(error.code==='AUTH_REQUIRED')onError(error);}}
     }
   }
   async function refreshAffected(action,args,expected){
