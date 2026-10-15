@@ -403,6 +403,27 @@ dd {
   margin:.5rem 0;
 }
 
+.name-entry-row {
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:.75rem;
+}
+
+@media(min-width:480px) {
+  .name-entry-row {
+    flex-direction:row;
+  }
+  .name-entry-row>input {
+    flex:1;
+    width:auto;
+  }
+  .name-entry-row>button {
+    flex:none;
+    white-space:nowrap;
+  }
+}
+
 @media(min-width:768px) {
   .shell,.header-inner {
     padding:1.5rem;
