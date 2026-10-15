@@ -104,3 +104,7 @@ These are **recommended paths only**, not existing completed deliverables or dra
 | Final navigation / submission checklist | existing `docs/final/` |
 
 No report, diagram, testing-report, manual, contribution-report or slide draft is created in this iteration. Formal contributions must be agreed with members; Git history provides evidence, not invented percentages. No main merge/default-branch change, code/test/configuration/schema change, chain write or Render deployment occurred in this foundation pass.
+
+## Diagram completion update — 15 October 2026
+
+The [five required diagrams](../diagrams/README.md) are now complete as editable Mermaid sources and SVG exports. The foundation planning table above is retained as historical context; diagrams are no longer a remaining deliverable. Reports, manual, contribution report and slides remain separate unfinished work. This diagram-only update does not change the accepted/live application baseline.

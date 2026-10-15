@@ -1,0 +1,25 @@
+flowchart TB
+  L["`Landing: /
+Name; Save Name & Continue
+Open dashboard`"]
+  D["`Dashboard: /main
+Wallet/auth status; roles; balances
+Remittances; Activity; Admin controls`"]
+  F["`Funding: /depositMoney
+Deposit / withdraw
+Available deposited funds / reserved`"]
+  R["`Remittance: /transferMoney
+Create / claim / cancel
+Verified result and remittance ID`"]
+  U["`User Log: /viewUser
+Name / Timestamp
+Delete All User Logs`"]
+  X["`User Log deleted: POST /deleteUser
+Confirmation; return links`"]
+  L -->|"Save valid name or Open dashboard"| D
+  D <-->|"Shared navigation / back link"| F
+  D <-->|"Shared navigation / back link"| R
+  D <-->|"Shared navigation / back link"| U
+  U -->|"Delete all: only user table"| X
+  X -->|"User Log"| U
+  X -->|"Dashboard"| D

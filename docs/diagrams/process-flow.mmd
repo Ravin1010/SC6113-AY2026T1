@@ -1,0 +1,14 @@
+flowchart TB
+  L["Landing: optional Name / User Log"] --> A["Open Dashboard; MetaMask login signature; verify account / session / Sepolia / roles"]
+  A --> G{"Fresh per-action preparation checks pass?"}
+  G -->|"No: role, pause, balance or context"| E["Explain failure; do not request wallet transaction"]
+  G -->|"Verified Sender deposit"| F["Available deposited funds"]
+  F -->|"Verified withdraw of available funds"| W["Test ETH back to owner wallet"]
+  F -->|"Verified create: user signs; reserve atomically"| P["PENDING: sender funds reserved"]
+  P -->|"Recipient claims"| C["Reservation released; direct recipient wallet payout; COMPLETED"]
+  P -->|"Sender cancels"| K["Reservation unlocked; sender availability restored; CANCELLED"]
+  C --> Q["Canonical receipt + 1 confirmation + exact authoritative post-state"]
+  K --> Q
+  Q --> U["Show confirmed; targeted state refresh; Activity independent"]
+  A -->|"Admin, separately"| M["Manage roles / pause; wallet signs; verify resulting state"]
+  G -.-> N["Wallet recovery: unresolved hash locked; Check transaction only; canonical terminal failure permits deliberate retry"]

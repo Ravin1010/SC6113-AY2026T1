@@ -1,0 +1,25 @@
+flowchart TB
+  subgraph GOVERNANCE["ADMINISTRATION — separate from the financial lifecycle"]
+    direction LR
+    A["Admin"] -->|"authorizeSender / authorizeRecipient / revokeRole / pause / unpause"| R["RoleRegistry"]
+  end
+  subgraph ACTORS["FINANCIAL PARTICIPANTS"]
+    direction LR
+    S["Sender"]
+    C["Recipient"]
+  end
+  subgraph CONTRACTS["FROZEN CONTRACT INTERACTION — Ethereum Sepolia"]
+    direction TB
+    P["paynow / transfer_money"]
+    D["deposit_money"]
+    P -->|"reserveFunds(...): create → PENDING; available decreases, reserved increases"| D
+    P -->|"releaseFunds(id): claim → COMPLETED; reservation cleared"| D
+    P -->|"unlockFunds(id): cancel → CANCELLED; reserved returns to sender available"| D
+  end
+  S -->|"deposit() / withdraw(amount) from available funds"| D
+  S -->|"transfer(recipient, amount) / cancel(id)"| P
+  C -->|"claim(id)"| P
+  D -->|"Claim: direct wallet payout; recipient deposited balance unchanged"| C
+  D -->|"Withdraw: test ETH to owner wallet"| S
+  P -.->|"pause; Sender and recipient-role checks on create"| R
+  D -.->|"pause; Sender-role check on deposit"| R

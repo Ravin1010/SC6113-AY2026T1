@@ -1,0 +1,43 @@
+flowchart TB
+  NOTE["Application DB support only; blockchain is financial authority"]
+  subgraph PUBLIC["INDEPENDENT USER LOG — no wallet mapping"]
+    USER["`user
+name · timestamp
+No declared primary key`"]
+  end
+  subgraph AUTH["AUTHENTICATION SUPPORT"]
+    direction LR
+    NONCE["`auth_nonces
+PK nonce
+wallet_address · attempt_hash
+message · expires_at · consumed_at`"]
+    WALLET["`app_wallets
+PK wallet_address
+created_at · last_login_at`"]
+    SESSION["`auth_sessions
+PK token_hash
+FK wallet_address
+expires_at · revoked_at`"]
+    SESSION -->|"many sessions → one wallet"| WALLET
+  end
+  subgraph INDEX["NON-AUTHORITATIVE BLOCKCHAIN-DERIVED HISTORY"]
+    direction LR
+    TX["`indexed_transactions
+PK chain_id + deployment_id + tx_hash
+sender_wallet · recipient_wallet
+block_number · block_hash · receipt_status`"]
+    EVENT["`indexed_events
+PK chain_id + deployment_id + tx_hash + log_index
+FK chain_id + deployment_id + tx_hash
+event_type · remittance_id · payload_json`"]
+    EVENT -->|"many events → one indexed transaction"| TX
+  end
+  subgraph CHECKPOINT["INDEPENDENT INDEXING PROGRESS"]
+    STATE["`indexing_state
+PK chain_id + deployment_id + contract_address
+last_block · last_block_hash · updated_at`"]
+  end
+  NOTE ~~~ PUBLIC
+  PUBLIC ~~~ AUTH
+  AUTH ~~~ INDEX
+  INDEX ~~~ CHECKPOINT

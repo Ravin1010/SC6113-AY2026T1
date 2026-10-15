@@ -122,6 +122,8 @@ The two later UI-only corrections each passed the existing 87 browser tests; the
 
 ## Documentation
 
+- [Five required submission diagrams — editable sources and SVGs](docs/diagrams/README.md)
+
 - [Current submission baseline and planned deliverable paths](docs/final/FINAL_SUBMISSION_BASELINE.md)
 - [Iteration 6B — Turso/Render and hosted lifecycle](docs/integration/ITERATION_6B.md)
 - [Iteration 7 — testing, security and gas](docs/testing/ITERATION_7.md); [gas results](results/iteration7_gas.md)
@@ -130,7 +132,7 @@ The two later UI-only corrections each passed the existing 87 browser tests; the
 - [Remediation, performance and Added Protection incident](docs/usability/ITERATION_9_REMEDIATION.md)
 - [Iteration 11 — final technical verification](docs/final/ITERATION_11_FINAL_VERIFICATION.md)
 
-The technical report, diagrams, consolidated testing report, user manual, combined Individual Contribution Report and slides remain separate deliverables. Links above are evidence records, not substitutes for those unfinished artifacts.
+The required diagram set is complete. The technical report, consolidated testing report, user manual, combined Individual Contribution Report and slides remain separate deliverables. Links above are evidence records, not substitutes for those unfinished artifacts.
 
 ## Contribution History
 
