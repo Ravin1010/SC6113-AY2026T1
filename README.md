@@ -12,6 +12,8 @@ SC6113 coursework MVP using **Sepolia test ETH only**. A Sender deposits funds, 
 - Direct authoritative remittance state, transaction/event Activity, and responsive dashboard.
 - Minimal Name/Timestamp User Log, independent of wallet authentication and roles.
 
+The exact ten blockchain transaction types are `authorizeSender`, `authorizeRecipient`, `revokeRole`, `pause`, `unpause`, `deposit`, `withdraw`, `transfer` (create remittance), `claim` and `cancel`. Deployment and one-time wiring are excluded.
+
 **Balance terminology:** Available deposited funds are the wallet owner's unreserved DApp deposits. Claim pays directly to the recipient's wallet; it does not increase the recipient's deposited balance. Cancel returns reserved funds to the sender's deposited balance.
 
 ## Architecture / Components
@@ -52,7 +54,7 @@ See [frozen deployment manifest](deployment/sepolia.json) and [Sepolia evidence]
 
 **Use branch [`hotfix/iteration-9-smart-account-failure-state`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/hotfix/iteration-9-smart-account-failure-state), not `main`, for the accepted project.**
 
-Accepted application baseline: [`54041cb257d85037ed4c45fe3f91da5d235a7eca`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/54041cb257d85037ed4c45fe3f91da5d235a7eca). This documentation-only foundation commit descends from it without runtime changes. Obtain the checked-out documentation revision with `git rev-parse HEAD`; do not confuse a newer documentation head with a different hosted implementation.
+Accepted application baseline: [`54041cb257d85037ed4c45fe3f91da5d235a7eca`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/54041cb257d85037ed4c45fe3f91da5d235a7eca). Documentation-only commits after this application baseline do not change the hosted runtime. Obtain the checked-out documentation revision with `git rev-parse HEAD`; do not confuse a newer documentation head with a different hosted implementation.
 
 The authoritative current-state summary is [FINAL_SUBMISSION_BASELINE.md](docs/final/FINAL_SUBMISSION_BASELINE.md). `main` is not the final submission branch at present.
 
@@ -123,8 +125,8 @@ The two later UI-only corrections each passed the existing 87 browser tests; the
 ## Documentation
 
 - [Five required submission diagrams — editable sources and SVGs](docs/diagrams/README.md)
-
 - [Current submission baseline and planned deliverable paths](docs/final/FINAL_SUBMISSION_BASELINE.md)
+- [Iteration 6A — Sepolia deployment and ten-action evidence](docs/integration/ITERATION_6A.md)
 - [Iteration 6B — Turso/Render and hosted lifecycle](docs/integration/ITERATION_6B.md)
 - [Iteration 7 — testing, security and gas](docs/testing/ITERATION_7.md); [gas results](results/iteration7_gas.md)
 - [Iteration 8 — problem evidence/research](docs/research/ITERATION_8.md)
@@ -132,8 +134,8 @@ The two later UI-only corrections each passed the existing 87 browser tests; the
 - [Remediation, performance and Added Protection incident](docs/usability/ITERATION_9_REMEDIATION.md)
 - [Iteration 11 — final technical verification](docs/final/ITERATION_11_FINAL_VERIFICATION.md)
 
-The required diagram set is complete. The technical report, consolidated testing report, user manual, combined Individual Contribution Report and slides remain separate deliverables. Links above are evidence records, not substitutes for those unfinished artifacts.
+The required diagram set is complete. The technical report, consolidated final testing report, user manual, combined Individual Contribution Report, presentation slides, 10-minute presentation/demo video or live demonstration, and final submission packaging remain pending separate deliverables. Links above are evidence records, not substitutes for those unfinished artifacts.
 
 ## Contribution History
 
-Git commit history records development progression and contribution evidence. It does not by itself establish formal member-by-member ownership or percentages. The final combined Individual Contribution Report will provide the agreed individual/group contribution summary; no allocation is invented here.
+[Git commit history](https://github.com/Ravin1010/SC6113-AY2026T1/commits/hotfix/iteration-9-smart-account-failure-state/) records development progression and contribution evidence. It does not by itself establish formal member-by-member ownership or percentages. The final combined Individual Contribution Report will provide the agreed individual/group contribution summary; no allocation is invented here.

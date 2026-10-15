@@ -1,6 +1,6 @@
 # Final submission baseline — SC6113
 
-Current-state foundation recorded 15 October 2026. **Cross-Border Remittance DApp with Recipient Claim and Status Tracking** is a Sepolia test-asset coursework MVP, not a production financial/remittance service. Technical work is accepted/frozen; the submission deliverables listed below remain unfinished.
+Current-state foundation recorded 15 October 2026. **Cross-Border Remittance DApp with Recipient Claim and Status Tracking** is a Sepolia test-asset coursework MVP, not a production financial/remittance service. Technical work and the five required diagrams are accepted/frozen; the other final deliverables listed below remain pending.
 
 ## Accepted source and live version
 
@@ -8,6 +8,7 @@ Current-state foundation recorded 15 October 2026. **Cross-Border Remittance DAp
 |---|---|
 | Repository | <https://github.com/Ravin1010/SC6113-AY2026T1> |
 | Submission branch | `hotfix/iteration-9-smart-account-failure-state` |
+| Documentation checkpoint audited | `2ea8d1e2dec4f9c3a73979f69f74054f5311cb1b` (input to this docs-only reconciliation; not deployed) |
 | Accepted application commit | [`54041cb257d85037ed4c45fe3f91da5d235a7eca`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/54041cb257d85037ed4c45fe3f91da5d235a7eca) |
 | Render URL | <https://sc6113-ay2026t1.onrender.com> |
 | Service / live deploy | `srv-dal7read0e5s738rldh0` / `dep-db83kbrncjis73eg8560` |
@@ -15,7 +16,7 @@ Current-state foundation recorded 15 October 2026. **Cross-Border Remittance DAp
 | Network / chain ID | Ethereum Sepolia / `11155111` |
 | Deployment ID | `sc6113-sepolia-11884239` |
 
-Branch/head and remote were read-only checked at exactly `54041cb` before this foundation edit; working tree was clean. Render metadata confirms that commit **Live**, deployment finished 2026-10-15 02:29:06 UTC. The foundation commit adds documentation only and therefore has a newer SHA without changing hosted implementation. Its exact SHA is in Git history/delivery; `git rev-parse HEAD` identifies a checked-out revision. `main` is not the accepted final submission branch; assessors should use the explicit branch and immutable baseline link.
+Branch/head and remote were read-only checked at exactly `54041cb` before this foundation edit; working tree was clean. Render metadata confirms that commit **Live**, deployment finished 2026-10-15 02:29:06 UTC. Later documentation-only commits have newer SHAs without changing hosted implementation. The final documentation head is in Git history/delivery; `git rev-parse HEAD` identifies a checked-out revision. `main` is not the accepted final submission branch; assessors should use the explicit branch and immutable baseline link.
 
 ## Frozen deployment
 
@@ -79,6 +80,8 @@ Other residuals: Render Free/cold periodic proof and public RPC latency; wallet 
 
 | Evidence | Record |
 |---|---|
+| Sepolia deployment / ten-action receipts | [Iteration 6A](../integration/ITERATION_6A.md) |
+| Required diagrams — complete | [Diagram index, five sources and SVGs](../diagrams/README.md) |
 | Production persistence / hosted lifecycle | [Iteration 6B](../integration/ITERATION_6B.md) |
 | Tests / security / gas | [Iteration 7](../testing/ITERATION_7.md), [gas results](../../results/iteration7_gas.md) |
 | Problem research and claim boundaries | [Iteration 8](../research/ITERATION_8.md), [evidence CSV](../../results/iteration8_evidence.csv) |
@@ -89,22 +92,23 @@ Other residuals: Render Free/cold periodic proof and public RPC latency; wallet 
 
 Older documents include dated policies and deployment snapshots. Use their final acceptance sections and this current-state summary rather than treating intermediate checkpoint wording as current behaviour.
 
-## Separate remaining deliverables and proposed locations
+## Submission deliverable status and locations
 
-These are **recommended paths only**, not existing completed deliverables or drafts. Keep historical evidence in place; create no empty folders/placeholders merely to imply completion.
+The diagrams are complete. Other final-deliverable paths below are recommendations, not completed artifacts or drafts. Historical testing/usability/deployment records are evidence, not substitutes for a consolidated report or the final demo. No separate checklist is needed.
 
-| Remaining deliverable | Recommended location |
-|---|---|
-| 10–15 page technical report | `docs/report/TECHNICAL_REPORT` (format/export decided later) |
-| Architecture, contract, data, process and UI diagrams | `docs/diagrams/` (editable sources plus exports) |
-| Consolidated testing/deployment report | `docs/testing/FINAL_TESTING_REPORT.md` (reuse existing testing directory) |
-| User manual | `docs/manual/USER_MANUAL.md` |
-| Combined Individual Contribution Report | `docs/contributions/INDIVIDUAL_CONTRIBUTION_REPORT.md` |
-| Presentation slides | `docs/presentation/` |
-| Final navigation / submission checklist | existing `docs/final/` |
+| Status | Deliverable | Location / recommended location |
+|---|---|---|
+| COMPLETE | Five required diagrams | [Sources and SVG exports](../diagrams/README.md) |
+| PENDING | 10–15 page technical report | `docs/report/TECHNICAL_REPORT` (format/export decided later) |
+| PENDING | Consolidated final testing/deployment report | `docs/testing/FINAL_TESTING_REPORT.md` |
+| PENDING | User manual | `docs/manual/USER_MANUAL.md` |
+| PENDING | Combined Individual Contribution Report | `docs/contributions/INDIVIDUAL_CONTRIBUTION_REPORT.md` |
+| PENDING | Presentation slides | `docs/presentation/` |
+| PENDING | 10-minute presentation/demo video or live demonstration | `docs/presentation/` (preparation/evidence links later) |
+| PENDING | Final submission packaging/check | existing `docs/final/` |
 
-No report, diagram, testing-report, manual, contribution-report or slide draft is created in this iteration. Formal contributions must be agreed with members; Git history provides evidence, not invented percentages. No main merge/default-branch change, code/test/configuration/schema change, chain write or Render deployment occurred in this foundation pass.
+**Original foundation-pass scope (historical):** No report, diagram, testing-report, manual, contribution-report or slide draft was created in that pass. Formal contributions must be agreed with members; Git history provides evidence, not invented percentages. No main merge/default-branch change, code/test/configuration/schema change, chain write or Render deployment occurred in this foundation pass.
 
 ## Diagram completion update — 15 October 2026
 
-The [five required diagrams](../diagrams/README.md) are now complete as editable Mermaid sources and SVG exports. The foundation planning table above is retained as historical context; diagrams are no longer a remaining deliverable. Reports, manual, contribution report and slides remain separate unfinished work. This diagram-only update does not change the accepted/live application baseline.
+The [five required diagrams](../diagrams/README.md) are now complete as editable Mermaid sources and SVG exports. The status table above now reflects this completion; diagrams are no longer a remaining deliverable. Reports, manual, contribution report and slides remain separate unfinished work. This diagram-only update does not change the accepted/live application baseline.
