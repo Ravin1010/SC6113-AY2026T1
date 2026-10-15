@@ -2,6 +2,6 @@
 {% block title %}Remittance{% endblock %}
 {% block content %}
 <div class="page-heading"><p class="eyebrow">Remittance</p><h1>Send. Claim. Track.</h1><p>Pending → Completed or Cancelled. One sender, one designated recipient.</p></div>
-<section class="notice"><p data-deployment-status>Blockchain deployment not configured yet.</p><p>Submission and live status reads require verified integration. Test assets only.</p></section>
+<section class="notice"><p data-deployment-status>Blockchain deployment not configured yet.</p><p>Submission and live status reads require verified integration. Test assets only.</p><p>Claimed remittances are paid directly to the recipient's wallet and do not increase Available deposited funds.</p><p>Cancelled remittances return reserved funds to the sender's Available deposited funds.</p></section>
 {{ forms.remittance() }}<a class="text-link" href="/main">← Back to dashboard</a>
 {% endblock %}
