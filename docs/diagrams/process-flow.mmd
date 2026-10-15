@@ -7,7 +7,7 @@ flowchart TB
   F -->|"Verified create: user signs; reserve atomically"| P["PENDING: sender funds reserved"]
   P -->|"Recipient claims"| C["Reservation released; direct recipient wallet payout; COMPLETED"]
   P -->|"Sender cancels"| K["Reservation unlocked; sender availability restored; CANCELLED"]
-  C --> Q["Canonical receipt + 1 confirmation + exact authoritative post-state"]
+  C --> Q["Transaction confirmed → refresh status/balances"]
   K --> Q
   Q --> U["Show confirmed; targeted state refresh; Activity independent"]
   A -->|"Admin, separately"| M["Manage roles / pause; wallet signs; verify resulting state"]
