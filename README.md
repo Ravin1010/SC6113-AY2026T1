@@ -6,7 +6,7 @@ SC6113 coursework MVP using **Sepolia test ETH only**. A Sender deposits funds, 
 
 ## Key Features
 
-- Sender, Recipient and immutable Admin/Auditor roles.
+- Sender, Recipient and immutable Admin roles.
 - MetaMask wallet-signature authentication and user-controlled transaction signing; Flask owns no wallet keys.
 - Deposit/withdraw; create/claim/cancel remittances; role administration and pause/unpause.
 - Direct authoritative remittance state, transaction/event Activity, and responsive dashboard.

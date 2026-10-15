@@ -31,7 +31,7 @@ Addresses are cross-checked against [the unchanged manifest](../../deployment/se
 ## Current architecture and financial semantics
 
 - MetaMask EIP-191 wallet-signature authentication establishes a Flask application session; blockchain writes are prepared unsigned by the backend and signed/submitted by the user's wallet. No server wallet/private keys.
-- Three roles: Sender, Recipient, Admin/Auditor. Only immutable Admin grants/revokes ordinary roles and controls pause. Admin can technically hold ordinary permissions (accepted Low limitation I7-01); those permissions cannot confer/replace Admin authority.
+- Three roles: Sender, Recipient, Admin. Only immutable Admin grants/revokes ordinary roles and controls pause. Admin can technically hold ordinary permissions (accepted Low limitation I7-01); those permissions cannot confer/replace Admin authority.
 - Three interacting contracts: RoleRegistry (roles/pause), deposit_money (deposits, available/reserved accounting, trusted reservation/payout), paynow/transfer_money (participant/lifecycle enforcement).
 - Lifecycle: deposit → available deposited funds → create/reserve → designated recipient claim **or** originating sender cancel → terminal status. Claim pays directly to the recipient's wallet, not their DApp available balance. Cancel restores the sender's deposited availability; only available funds may be withdrawn.
 - Blockchain is financial authority for roles, pause, balances, reservations, remittance parties/amount/status and transaction outcomes. Remittance discovery is direct verified-contract scanning, not index-dependent.
