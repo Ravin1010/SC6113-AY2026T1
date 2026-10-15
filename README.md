@@ -10,6 +10,7 @@ SC6113 coursework MVP using **Sepolia test ETH only**. A Sender deposits funds, 
 - MetaMask wallet-signature authentication and user-controlled transaction signing; Flask owns no wallet keys.
 - Deposit/withdraw; create/claim/cancel remittances; role administration and pause/unpause.
 - Direct authoritative remittance state, transaction/event Activity, and responsive dashboard.
+- Remittance Status Overview: PENDING / COMPLETED / CANCELLED bars and counts for the currently loaded page (up to 20), presentation only, with no extra API/RPC request. This is not historical analytics.
 - Minimal Name/Timestamp User Log, independent of wallet authentication and roles.
 
 The exact ten blockchain transaction types are `authorizeSender`, `authorizeRecipient`, `revokeRole`, `pause`, `unpause`, `deposit`, `withdraw`, `transfer` (create remittance), `claim` and `cancel`. Deployment and one-time wiring are excluded.
@@ -47,14 +48,14 @@ See [frozen deployment manifest](deployment/sepolia.json) and [Sepolia evidence]
 
 - Application: <https://sc6113-ay2026t1.onrender.com>
 - Render service: `srv-dal7read0e5s738rldh0`
-- Verified live application commit: `54041cb257d85037ed4c45fe3f91da5d235a7eca`
-- Live deploy: `dep-db83kbrncjis73eg8560` (confirmed Live for this documentation pass).
+- Verified live application commit: `72eec24297a3925979c1573182c4edb09ad77dd1`
+- Live deploy: `dep-db8694ou01pc73emjnv0` (confirmed Live for this documentation pass).
 
 ## Repository / Submission Baseline
 
 **Use branch [`hotfix/iteration-9-smart-account-failure-state`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/hotfix/iteration-9-smart-account-failure-state), not `main`, for the accepted project.**
 
-Accepted application baseline: [`54041cb257d85037ed4c45fe3f91da5d235a7eca`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/54041cb257d85037ed4c45fe3f91da5d235a7eca). Documentation-only commits after this application baseline do not change the hosted runtime. Obtain the checked-out documentation revision with `git rev-parse HEAD`; do not confuse a newer documentation head with a different hosted implementation.
+Accepted application baseline: [`72eec24297a3925979c1573182c4edb09ad77dd1`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/72eec24297a3925979c1573182c4edb09ad77dd1). Documentation-only commits after this application baseline do not change the hosted runtime. Obtain the checked-out documentation revision with `git rev-parse HEAD`; do not confuse a newer documentation head with a different hosted implementation.
 
 The authoritative current-state summary is [FINAL_SUBMISSION_BASELINE.md](docs/final/FINAL_SUBMISSION_BASELINE.md). `main` is not the final submission branch at present.
 
@@ -112,6 +113,8 @@ Use an isolated checkout for evaluation/profile scripts: they regenerate result 
 
 The two later UI-only corrections each passed the existing 87 browser tests; the wording correction additionally passed 29 backend tests and three rendered-page checks. The layout correction passed focused 320/360/768/1280px checks. The full Iteration 11 suite was not rerun after them.
 
+Latest visualization remediation: **12 focused tests, 99 full browser tests and 214 Python tests passed**, including 320/360/768/1280px checks. These supplement, not replace or rerun, the historical contract/integration suites. [Implementation and hosted read-only evidence](docs/final/FINAL_VISUALIZATION_REMEDIATION.md).
+
 ## Known Limitations
 
 - Coursework/test-asset MVP: no real fiat/bank settlement, FX, production KYC/AML or regulatory-compliance claim.
@@ -133,6 +136,7 @@ The two later UI-only corrections each passed the existing 87 browser tests; the
 - [Iteration 9 — five-person usability evaluation](docs/usability/ITERATION_9.md)
 - [Remediation, performance and Added Protection incident](docs/usability/ITERATION_9_REMEDIATION.md)
 - [Iteration 11 — final technical verification](docs/final/ITERATION_11_FINAL_VERIFICATION.md)
+- [Final visualization remediation — current runtime and hosted verification](docs/final/FINAL_VISUALIZATION_REMEDIATION.md)
 
 The required diagram set is complete. The technical report, consolidated final testing report, user manual, combined Individual Contribution Report, presentation slides, 10-minute presentation/demo video or live demonstration, and final submission packaging remain pending separate deliverables. Links above are evidence records, not substitutes for those unfinished artifacts.
 

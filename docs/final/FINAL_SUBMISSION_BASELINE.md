@@ -8,15 +8,15 @@ Current-state foundation recorded 15 October 2026. **Cross-Border Remittance DAp
 |---|---|
 | Repository | <https://github.com/Ravin1010/SC6113-AY2026T1> |
 | Submission branch | `hotfix/iteration-9-smart-account-failure-state` |
-| Documentation checkpoint audited | `2ea8d1e2dec4f9c3a73979f69f74054f5311cb1b` (input to this docs-only reconciliation; not deployed) |
-| Accepted application commit | [`54041cb257d85037ed4c45fe3f91da5d235a7eca`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/54041cb257d85037ed4c45fe3f91da5d235a7eca) |
+| Documentation checkpoint audited | `02f67fe28be24b62b859d945c050f1a738111f8d` (prior submission foundation); this evidence freeze is a documentation-only child of the live implementation. Obtain its exact SHA with `git rev-parse HEAD`. |
+| Accepted application commit | [`72eec24297a3925979c1573182c4edb09ad77dd1`](https://github.com/Ravin1010/SC6113-AY2026T1/tree/72eec24297a3925979c1573182c4edb09ad77dd1) |
 | Render URL | <https://sc6113-ay2026t1.onrender.com> |
-| Service / live deploy | `srv-dal7read0e5s738rldh0` / `dep-db83kbrncjis73eg8560` |
-| Live implementation | `54041cb257d85037ed4c45fe3f91da5d235a7eca` |
+| Service / live deploy | `srv-dal7read0e5s738rldh0` / `dep-db8694ou01pc73emjnv0` |
+| Live implementation | `72eec24297a3925979c1573182c4edb09ad77dd1` |
 | Network / chain ID | Ethereum Sepolia / `11155111` |
 | Deployment ID | `sc6113-sepolia-11884239` |
 
-Branch/head and remote were read-only checked at exactly `54041cb` before this foundation edit; working tree was clean. Render metadata confirms that commit **Live**, deployment finished 2026-10-15 02:29:06 UTC. Later documentation-only commits have newer SHAs without changing hosted implementation. The final documentation head is in Git history/delivery; `git rev-parse HEAD` identifies a checked-out revision. `main` is not the accepted final submission branch; assessors should use the explicit branch and immutable baseline link.
+Render metadata confirms implementation `72eec24297a3925979c1573182c4edb09ad77dd1` **Live**, deploy `dep-db8694ou01pc73emjnv0`, finished 2026-10-15 05:29:58 UTC. The owner performed exact-commit deployment; this continuation performed read-only verification and no deployment. The subsequent documentation-only freeze is not a runtime change. `main` remains non-authoritative; use the explicit submission branch and distinguish live implementation from documentation HEAD.
 
 ## Frozen deployment
 
@@ -37,6 +37,7 @@ Addresses are cross-checked against [the unchanged manifest](../../deployment/se
 - Lifecycle: deposit → available deposited funds → create/reserve → designated recipient claim **or** originating sender cancel → terminal status. Claim pays directly to the recipient's wallet, not their DApp available balance. Cancel restores the sender's deposited availability; only available funds may be withdrawn.
 - Blockchain is financial authority for roles, pause, balances, reservations, remittance parties/amount/status and transaction outcomes. Remittance discovery is direct verified-contract scanning, not index-dependent.
 - SQLite locally and Turso in production store User Log, nonce/session/wallet support, indexed transactions/events and indexing progress. Activity is non-authoritative, cached and independently reconciled; browser sessionStorage is only a scoped presentation cache.
+- Remittance Status Overview presents PENDING / COMPLETED / CANCELLED counts and bars from the same currently loaded remittance page (up to 20). No additional API/RPC request, polling, cache or chart dependency is introduced. Unknown statuses are reported separately; the visualization is presentation only, not historical or system-wide analytics.
 - One canonical confirmation plus required action-specific direct post-state gates success. Hash preservation, pending/no-resubmit lock, verification-only retry, account-switch reauthentication and reorg/deployment checks remain in force.
 
 Exact ten state-changing transaction types (deployment/setup excluded):
@@ -64,7 +65,9 @@ Exact ten state-changing transaction types (deployment/setup excluded):
 - dependency compatibility, JS/Python syntax and diff checks passed;
 - read-only hosted pages/auth boundaries and pinned contract wiring/state passed at the recorded time.
 
-Two subsequent changes were UI/presentation only, confirmed by inspecting the commit range: `da6a3c56a09857b129548b649d013ba2770a754b` clarifies deposited funds/claim/cancel; `54041cb257d85037ed4c45fe3f91da5d235a7eca` aligns the name input/save button responsively. Each passed 87 browser tests. Wording also passed 29 backend tests and three rendered-page checks; layout had focused 320/360/768/1280px validation/submission/layout checks. These are targeted follow-up results, **not a rerun of the full Iteration 11 suite**. Owner manually verified both changes on the current hosted deployment; this is owner-observed evidence, not a new automated hosted test here.
+Two subsequent changes were UI/presentation only, confirmed by inspecting the commit range: `da6a3c56a09857b129548b649d013ba2770a754b` clarifies deposited funds/claim/cancel; `54041cb257d85037ed4c45fe3f91da5d235a7eca` aligns the name input/save button responsively. Each passed 87 browser tests. Wording also passed 29 backend tests and three rendered-page checks; layout had focused 320/360/768/1280px validation/submission/layout checks. These are targeted follow-up results, **not a rerun of the full Iteration 11 suite**. Owner manually verified both changes on the then-current `54041cb` hosted deployment; this is owner-observed evidence, not a new automated hosted test here.
+
+The later status visualization passed 12 focused tests, 99 full browser tests and 214 Python tests, plus 320/360/768/1280px, syntax/dependency/diff checks. Current live markup/assets and guest safety were checked read-only; non-zero hosted counts were not observed without a wallet session. See [final visualization remediation](FINAL_VISUALIZATION_REMEDIATION.md). Historical Solidity/local-chain totals above were not rerun for this frontend-only change.
 
 Iteration 9 contains five real classmates/friends' sessions (45 normalized rows), conservatively analysed without population inference or SUS claims. Remediation and post-freeze failure recovery are accepted/frozen. Original participant evidence and historical checkpoints remain unchanged. No fresh participant study is claimed.
 
@@ -74,7 +77,7 @@ Iteration 9 contains five real classmates/friends' sessions (45 normalized rows)
 
 Bounded guidance: “MetaMask Added Protection / Smart Account wrapped execution may fail for this Sepolia coursework DApp in some wallet/version/account states. If a protected transaction fails, the DApp safely detects the failure and allows retry. Use the standard wallet transaction path for this testnet DApp where applicable.” Never automatically disable protections, switch account mode, authorize framework contracts as users or blindly resubmit a pending hash. One successful Smart Account case is not universal compatibility. Sepolia support/eligibility details remain an evidence gap, not a blanket unsupported-network diagnosis.
 
-Other residuals: Render Free/cold periodic proof and public RPC latency; wallet interaction/chain inclusion; one-confirmation short-reorg trade-off; incomplete non-authoritative historical index; low-volume direct scanning; no advanced chart (basic balance/status summaries only); convenience-sample usability limitations; unpinned Flask/gunicorn dependencies. No formal security audit, representative usability, scalability, real fiat/FX/KYC/AML, fee reduction or production-financial suitability claim. No new chain write or infrastructure maintenance is needed for this documentation foundation.
+Other residuals: Render Free/cold periodic proof and public RPC latency; wallet interaction/chain inclusion; one-confirmation short-reorg trade-off; incomplete non-authoritative historical index; low-volume direct scanning; current-page status chart only (no historical trends or advanced BI); convenience-sample usability limitations; unpinned Flask/gunicorn dependencies. No formal security audit, representative usability, scalability, real fiat/FX/KYC/AML, fee reduction or production-financial suitability claim. No new chain write or infrastructure maintenance is needed for this documentation foundation.
 
 ## Evidence navigation
 
@@ -88,6 +91,7 @@ Other residuals: Render Free/cold periodic proof and public RPC latency; wallet 
 | Actual usability evaluation | [Iteration 9](../usability/ITERATION_9.md), [45-row dataset](../../results/iteration9_usability.csv) |
 | Remediation / performance / final incident diagnosis | [Iteration 9 remediation](../usability/ITERATION_9_REMEDIATION.md) |
 | Full final technical verification (historical) | [Iteration 11](ITERATION_11_FINAL_VERIFICATION.md) |
+| Current visualization/runtime verification | [Final visualization remediation](FINAL_VISUALIZATION_REMEDIATION.md) |
 | Setup / assessor entry point | [README](../../README.md) |
 
 Older documents include dated policies and deployment snapshots. Use their final acceptance sections and this current-state summary rather than treating intermediate checkpoint wording as current behaviour.
